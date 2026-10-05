@@ -1,0 +1,26 @@
+{
+  "name": "planetarium",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A web planetarium with a telescope eyepiece simulator (Vite + TypeScript + three.js).",
+  "license": "MIT",
+  "author": "PSCactux",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "data": "node scripts/build-data.mjs"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.186.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
+  }
+}

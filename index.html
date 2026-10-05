@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="A web planetarium with a telescope eyepiece simulator." />
+    <meta name="theme-color" content="#05070d" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%23081020'/%3E%3Cpath d='M16 6l2.4 7.2H26l-6.1 4.5 2.3 7.3L16 20.5 9.8 25l2.3-7.3L6 13.2h7.6z' fill='%23ffe7a0'/%3E%3C/svg%3E" />
+    <title>Planetarium</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="gl"></canvas>
+      <canvas id="overlay"></canvas>
+
+      <header class="hud">
+        <div class="brand">Planetarium</div>
+        <div id="clock" class="clock"></div>
+      </header>
+
+      <div class="timebar" role="toolbar" aria-label="Time controls">
+        <button id="slower" title="Slower / backwards">⏪</button>
+        <button id="play" title="Play / pause (space)">⏸</button>
+        <button id="faster" title="Faster">⏩</button>
+        <span id="speed-label" class="speed"></span>
+        <button id="now" title="Back to the current time">Now</button>
+        <button id="scope-toggle" title="Telescope view (T)">🔭 Telescope</button>
+      </div>
+
+      <button id="panel-toggle" class="panel-toggle" aria-controls="panel" title="Settings">☰</button>
+      <aside id="panel" class="panel">
+        <details open>
+          <summary>Time</summary>
+          <label>Date and time (your browser's time zone)
+            <input id="datetime" type="datetime-local" step="60" />
+          </label>
+          <label>Speed
+            <select id="speed"></select>
+          </label>
+        </details>
+
+        <details open>
+          <summary>Location</summary>
+          <label>Preset <select id="place"></select></label>
+          <div class="row">
+            <label>Latitude <input id="lat" type="number" step="0.0001" min="-90" max="90" /></label>
+            <label>Longitude <input id="lon" type="number" step="0.0001" min="-180" max="180" /></label>
+          </div>
+          <button id="geolocate" class="wide">📍 Use my location</button>
+          <p id="geo-status" class="hint"></p>
+        </details>
+
+        <details open>
+          <summary>Display</summary>
+          <label class="check"><input id="show-lines" type="checkbox" /> Constellation lines</label>
+          <label class="check"><input id="show-cnames" type="checkbox" /> Constellation names</label>
+          <label class="check"><input id="show-snames" type="checkbox" /> Star names</label>
+          <label class="check"><input id="show-atmosphere" type="checkbox" /> Atmosphere and daylight</label>
+          <label class="check"><input id="show-ground" type="checkbox" /> Ground</label>
+        </details>
+
+        <details open>
+          <summary>Telescope</summary>
+          <label class="check"><input id="scope" type="checkbox" /> Telescope view</label>
+          <div class="row">
+            <label>Focal length (mm) <input id="tel-f" type="number" min="50" max="5000" step="1" /></label>
+            <label>Aperture (mm) <input id="tel-d" type="number" min="20" max="1000" step="1" /></label>
+          </div>
+          <div class="row">
+            <label>Eyepiece (mm) <input id="eye-f" type="number" min="2" max="60" step="0.5" /></label>
+            <label>Apparent FOV (°) <input id="eye-afov" type="number" min="30" max="120" step="1" /></label>
+          </div>
+          <div class="presets" id="eyepieces"></div>
+          <label class="check"><input id="invert" type="checkbox" /> Inverted image (no star diagonal)</label>
+          <table id="scope-stats" class="stats"></table>
+        </details>
+
+        <p class="hint">Drag to look around · scroll or pinch to zoom · click an object for details.
+          Keys: arrows pan, +/− zoom, space pause, T telescope.</p>
+      </aside>
+
+      <div id="info" class="info" hidden>
+        <button id="info-close" class="close" title="Close">×</button>
+        <h2 id="info-title"></h2>
+        <p id="info-sub" class="sub"></p>
+        <table id="info-table" class="stats"></table>
+        <div class="actions">
+          <button id="info-center">Center</button>
+          <label class="check"><input id="info-track" type="checkbox" /> Track</label>
+        </div>
+      </div>
+
+      <div id="loading" class="loading">Loading the sky…</div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
