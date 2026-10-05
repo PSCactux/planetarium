@@ -25,6 +25,7 @@ Built with Vite, TypeScript and three.js. No backend, no tracking, no API keys.
 - Location: geolocation (rounded to about 1 km and never stored), manual latitude and longitude, and a few presets (Greenwich Observatory is the default).
 - Click any star or planet to see its name, magnitude, RA/Dec (J2000 and of date), altitude and azimuth. You can centre it or track it.
 - **Telescope view.** Set the focal length and aperture of the telescope and the focal length and apparent field of the eyepiece. The defaults match a 70/400 refractor with a 10 mm, 52° eyepiece, and there are presets for 25, 10 and 6 mm eyepieces. The view shows the circular true field and lists the magnification, exit pupil, focal ratio, limiting magnitude, useful magnification range and Dawes limit. There is an option to flip the image 180°, as a straight-through refractor does. A warning appears if the Sun is near the field.
+- **Telescope targets.** Switching to the telescope view always aims at something: the selected object if it is up, otherwise Vega at night or the brightest visible object in daylight, and the view then tracks it. A selector in the bottom bar (or the `[` and `]` keys) steps through the targets that are currently above the horizon, away from the Sun and bright enough to see: the Moon, the planets and about 25 classic eyepiece stars such as Albireo, Mizar and the Pleiades. Clicking an object inside the eyepiece re-aims the telescope at it.
 - Shareable views through the query string, for example
   `?t=2026-10-04T02:30:00Z&target=alcyone&scope=1&eye=25`
   (`t`, `lat`, `lon`, `az`, `alt`, `fov`, `scope`, `eye`, `target`, `paused`, `panel`).
@@ -93,9 +94,10 @@ src/
   ui/           formatting helpers
   data.ts       loads public/data/*.json
   state.ts      app state, presets, query-string options
+  targets.ts    telescope tour: showpiece targets, visibility and default choice
   main.ts       wiring: input, controls, info card, render loop
 public/data/    preprocessed catalogues + NOTICE.txt
 scripts/        build-data.mjs (downloads and converts the catalogues), star-names.mjs
-tests/          Vitest tests against Meeus reference values
+tests/          Vitest tests against Meeus reference values, telescope target choice
 docs/           screenshots
 ```

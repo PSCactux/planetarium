@@ -93,10 +93,12 @@ export class Overlay {
     if (selection) {
       const p = sky.project(sky.targetVec(selection), width, height);
       if (p) {
-        ctx.strokeStyle = 'rgba(255, 200, 80, 0.9)';
-        ctx.lineWidth = 1.5;
+        // In the eyepiece the ring frames the target instead of covering it.
+        const scope = state.telescopeMode;
+        ctx.strokeStyle = scope ? 'rgba(255, 200, 80, 0.45)' : 'rgba(255, 200, 80, 0.9)';
+        ctx.lineWidth = scope ? 1 : 1.5;
         ctx.beginPath();
-        ctx.arc(p[0], p[1], Math.max(12, sky.discRadiusPx(selection, height) + 8), 0, Math.PI * 2);
+        ctx.arc(p[0], p[1], Math.max(scope ? 30 : 12, sky.discRadiusPx(selection, height) + (scope ? 16 : 8)), 0, Math.PI * 2);
         ctx.stroke();
       }
     }
@@ -108,13 +110,19 @@ export class Overlay {
       ctx.font = '600 13px system-ui, sans-serif';
       ctx.fillStyle = 'rgba(200, 205, 220, 0.9)';
       const top = height / 2 - 0.45 * Math.min(width, height) - 4;
-      ctx.fillText(
-        `${state.telescope.focalLength}/${state.telescope.aperture} mm · ${state.telescope.eyepieceFocalLength} mm eyepiece · ` +
-          `${s.magnification.toFixed(0)}× · field ${s.trueFov.toFixed(2)}° · stars to mag ${f.limitMag.toFixed(1)}` +
-          (f.limitMag > 6.6 ? ' (catalogue complete to ~6.5)' : ''),
-        width / 2,
-        Math.max(14, top),
-      );
+      const optics = `${state.telescope.focalLength}/${state.telescope.aperture} mm · ${state.telescope.eyepieceFocalLength} mm eyepiece · ` +
+        `${s.magnification.toFixed(0)}×`;
+      const field = `field ${s.trueFov.toFixed(2)}° · stars to mag ${f.limitMag.toFixed(1)}` +
+        (f.limitMag > 6.6 ? ' (catalogue complete to ~6.5)' : '');
+      const oneLine = `${optics} · ${field}`;
+      if (ctx.measureText(oneLine).width <= width - 24) {
+        ctx.fillText(oneLine, width / 2, Math.max(14, top));
+      } else {
+        // Narrow screens: two lines, and drop the catalogue note if it still does not fit.
+        const second = ctx.measureText(field).width <= width - 24 ? field : field.replace(' (catalogue complete to ~6.5)', '');
+        ctx.fillText(optics, width / 2, Math.max(14, top - 16));
+        ctx.fillText(second, width / 2, Math.max(30, top));
+      }
       // Safety first: the Sun anywhere near the eyepiece field.
       const sun = sky.targetVec({ kind: 'sun' });
       const view = sky.camera.getWorldDirection(sky.camera.position.clone());

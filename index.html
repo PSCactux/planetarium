@@ -25,6 +25,11 @@
         <span id="speed-label" class="speed"></span>
         <button id="now" title="Back to the current time">Now</button>
         <button id="scope-toggle" title="Telescope view (T)">🔭 Telescope</button>
+        <span id="scope-bar" class="scope-bar" hidden>
+          <button id="scope-prev" title="Previous target ([)" aria-label="Previous target">‹</button>
+          <select id="scope-target" aria-label="Telescope target"></select>
+          <button id="scope-next" title="Next target (])" aria-label="Next target">›</button>
+        </span>
       </div>
 
       <button id="panel-toggle" class="panel-toggle" aria-controls="panel" title="Settings">☰</button>
@@ -76,7 +81,7 @@
         </details>
 
         <p class="hint">Drag to look around · scroll or pinch to zoom · click an object for details.
-          Keys: arrows pan, +/− zoom, space pause, T telescope.</p>
+          Keys: arrows pan, +/− zoom, space pause, T telescope, [ ] previous/next telescope target.</p>
       </aside>
 
       <div id="info" class="info" hidden>

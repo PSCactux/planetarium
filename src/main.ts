@@ -8,6 +8,7 @@ import { vecToSpherical, norm360 } from './astro/math';
 import { PLANETS, moonPhaseName } from './astro/solarsystem';
 import { telescopeStats } from './astro/optics';
 import { compass, formatDMS, formatDeg, formatRA, toLocalInput } from './ui/format';
+import { buildTour, defaultStop, stopMagnitude, targetKey, visibleStops, type TourStop } from './targets';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -29,8 +30,16 @@ async function main() {
   window.addEventListener('resize', resize);
   resize();
 
+  // Keep the info card above the time bar, whose height changes when it wraps (phones, telescope mode).
+  const timebar = document.querySelector<HTMLElement>('.timebar')!;
+  new ResizeObserver(() => {
+    document.documentElement.style.setProperty('--timebar-h', `${timebar.offsetHeight}px`);
+  }).observe(timebar);
+
   let selection: Target | null = null;
   let tracking = false;
+  const tour = buildTour(stars);
+  let visible: TourStop[] = [];
 
   // ---------------------------------------------------------------- view input
   const pointers = new Map<number, { x: number; y: number }>();
@@ -82,10 +91,16 @@ async function main() {
   const pointerUp = (e: PointerEvent) => {
     pointers.delete(e.pointerId);
     if (pointers.size === 0 && downAt && moved < 6) {
-      selection = sky.pick(e.clientX, e.clientY, width, height, state.showGround);
-      tracking = false;
-      $<HTMLInputElement>('info-track').checked = false;
-      updateInfo(true);
+      const picked = sky.pick(e.clientX, e.clientY, width, height, state.showGround);
+      if (state.telescopeMode) {
+        // In the eyepiece a click re-aims the telescope; a click on empty sky keeps the current target.
+        if (picked) aimAt(picked);
+      } else {
+        selection = picked;
+        tracking = false;
+        $<HTMLInputElement>('info-track').checked = false;
+        updateInfo(true);
+      }
     }
     if (pointers.size === 0) downAt = null;
   };
@@ -107,6 +122,8 @@ async function main() {
     else if (e.key === '-') zoom(1.25);
     else if (e.key === ' ') { state.playing = !state.playing; syncControls(); }
     else if (e.key.toLowerCase() === 't') setTelescope(!state.telescopeMode);
+    else if (e.key === ']' && state.telescopeMode) stepTarget(1);
+    else if (e.key === '[' && state.telescopeMode) stepTarget(-1);
     else return;
     e.preventDefault();
   });
@@ -175,10 +192,74 @@ async function main() {
     el.addEventListener('change', () => { (state[key] as boolean) = el.checked; });
   }
 
+  // ---------------------------------------------------------------- telescope targets
+  const scopeSelect = $<HTMLSelectElement>('scope-target');
+  let optionsSignature = '';
+
+  function targetLabel(t: Target): string {
+    if (t.kind === 'star') {
+      const s = stars[t.index];
+      return s.name || s.designation || `HR ${s.hr}`;
+    }
+    if (t.kind === 'planet') return PLANETS.find((p) => p.id === t.id)!.name;
+    return t.kind === 'sun' ? 'Sun' : 'Moon';
+  }
+
+  /** Recomputes which tour stops are up and refreshes the target selector. */
+  function refreshStops(updateFrame = true) {
+    if (updateFrame) sky.update(state, width, height);
+    visible = visibleStops(tour, sky, stars);
+    const current = selection ? targetKey(selection) : '';
+    const entries = visible.map((s) => ({ key: s.key, name: s.name }));
+    // An object picked by clicking that is not in the tour still shows as the current target.
+    if (selection && current && !entries.some((e) => e.key === current)) entries.unshift({ key: current, name: targetLabel(selection) });
+    const signature = entries.map((e) => e.key).join('|');
+    if (signature !== optionsSignature) {
+      optionsSignature = signature;
+      scopeSelect.replaceChildren(...entries.map((e) => new Option(e.name, e.key)));
+      if (!entries.length) scopeSelect.add(new Option('Nothing bright is up', ''));
+    }
+    scopeSelect.disabled = entries.length === 0;
+    if (entries.some((e) => e.key === current)) scopeSelect.value = current;
+    else scopeSelect.selectedIndex = entries.length ? -1 : 0;
+  }
+
+  /** Selects a target, points the telescope at it and keeps tracking it. */
+  function aimAt(t: Target) {
+    selection = t;
+    tracking = true;
+    $<HTMLInputElement>('info-track').checked = true;
+    sky.update(state, width, height);
+    centerOn(t);
+    updateInfo(true);
+    refreshStops();
+  }
+
+  function stepTarget(dir: 1 | -1) {
+    refreshStops();
+    if (!visible.length) return;
+    const i = selection ? visible.findIndex((s) => s.key === targetKey(selection!)) : -1;
+    const next = i < 0 ? (dir > 0 ? 0 : visible.length - 1) : (i + dir + visible.length) % visible.length;
+    aimAt(visible[next].target);
+  }
+
+  scopeSelect.addEventListener('change', () => {
+    const stop = tour.find((s) => s.key === scopeSelect.value);
+    if (stop) aimAt(stop.target);
+    scopeSelect.blur();
+  });
+  $('scope-prev').addEventListener('click', () => stepTarget(-1));
+  $('scope-next').addEventListener('click', () => stepTarget(1));
+
   const setTelescope = (on: boolean) => {
     state.telescopeMode = on;
-    // Point the telescope at the selected object, like a finder scope would.
-    if (on && selection) centerOn(selection);
+    if (on) {
+      // Like a finder scope: keep the selected object if it is up, otherwise go to Vega or whatever is visible.
+      refreshStops();
+      const keep = selection && selection.kind !== 'sun' && horizonVecToAltAz(sky.targetVec(selection)).alt > 0;
+      const target = keep ? selection : defaultStop(visible, sky.frame.daylight, (s) => stopMagnitude(s, sky, stars))?.target;
+      if (target) aimAt(target);
+    }
     syncControls();
   };
   $<HTMLInputElement>('scope').addEventListener('change', (e) => setTelescope((e.target as HTMLInputElement).checked));
@@ -214,6 +295,8 @@ async function main() {
     for (const [id, key] of checks) $<HTMLInputElement>(id).checked = state[key] as boolean;
     $<HTMLInputElement>('scope').checked = state.telescopeMode;
     $('scope-toggle').classList.toggle('active', state.telescopeMode);
+    $('scope-bar').hidden = !state.telescopeMode;
+    document.body.classList.toggle('scope-mode', state.telescopeMode);
     for (const [id, key] of scopeInputs) $<HTMLInputElement>(id).value = String(state.telescope[key]);
     for (const b of eyepieces.querySelectorAll<HTMLButtonElement>('button'))
       b.classList.toggle('active', Number(b.dataset.mm) === state.telescope.eyepieceFocalLength);
@@ -323,10 +406,14 @@ async function main() {
     }
   }
 
+  // ?scope=1 opens straight into the telescope view, aimed at something worth looking at.
+  if (state.telescopeMode) setTelescope(true);
+
   // ---------------------------------------------------------------- loop
   const clock = $('clock');
   let lastFrame = performance.now();
   let lastClock = -Infinity;
+  let lastStops = -Infinity;
   syncControls();
 
   function frame(now: number) {
@@ -339,6 +426,10 @@ async function main() {
       centerOn(selection);
     }
     const f = sky.update(state, width, height);
+    if (state.telescopeMode && now - lastStops > 1000) {
+      lastStops = now;
+      refreshStops(false);
+    }
     sky.render();
     overlay.draw(sky, state, selection, width, height);
     updateInfo();

@@ -31,6 +31,9 @@ input[type='checkbox'] { width: auto; accent-color: var(--accent); }
 .timebar { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 6px;
   align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
   padding: 6px; backdrop-filter: blur(6px); max-width: calc(100vw - 32px); flex-wrap: wrap; justify-content: center; }
+.scope-bar { display: inline-flex; gap: 4px; align-items: center; }
+.scope-bar[hidden] { display: none; }
+.scope-bar select { max-width: 170px; }
 .speed { min-width: 78px; text-align: center; font-variant-numeric: tabular-nums; color: var(--muted); }
 
 .panel-toggle { position: absolute; top: 12px; right: 16px; z-index: 3; width: 40px; height: 40px; padding: 0; font-size: 18px; }
@@ -53,7 +56,7 @@ input[type='checkbox'] { width: auto; accent-color: var(--accent); }
 .stats td:last-child { text-align: right; }
 .stats .warn { color: #ff8a6a; }
 
-.info { position: absolute; left: 16px; bottom: 76px; width: 320px; background: var(--panel); border: 1px solid var(--border);
+.info { position: absolute; left: 16px; bottom: calc(var(--timebar-h, 50px) + 26px); width: 320px; background: var(--panel); border: 1px solid var(--border);
   border-radius: 12px; padding: 10px 14px; backdrop-filter: blur(6px); z-index: 2; }
 .info h2 { margin: 0; font-size: 18px; }
 .info .sub { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
@@ -64,6 +67,8 @@ input[type='checkbox'] { width: auto; accent-color: var(--accent); }
 
 @media (max-width: 640px) {
   .panel { left: 16px; right: 16px; width: auto; top: 60px; max-height: calc(100% - 150px); }
-  .info { left: 16px; right: 16px; width: auto; bottom: 120px; }
+  .info { left: 16px; right: 16px; width: auto; }
+  /* In the eyepiece on a phone the full card would cover the target: keep only name and actions. */
+  body.scope-mode .info .stats { display: none; }
   .timebar button { padding: 6px 8px; }
 }
