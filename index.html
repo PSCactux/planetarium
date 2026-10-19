@@ -15,8 +15,17 @@
 
       <header class="hud">
         <div class="brand">Planetarium</div>
-        <div id="clock" class="clock"></div>
+        <div id="clock" class="clock">
+          <span><span id="clock-local"></span> <span class="clock-note">(browser time)</span></span>
+          <span id="clock-utc" class="clock-utc"></span>
+          <span id="clock-place"></span>
+        </div>
       </header>
+
+      <div id="day-hint" class="day-hint" hidden>
+        <span>Daylight hides the stars.</span>
+        <button id="tonight">See tonight's sky</button>
+      </div>
 
       <div class="timebar" role="toolbar" aria-label="Time controls">
         <button id="slower" title="Slower / backwards">⏪</button>
@@ -34,6 +43,10 @@
 
       <button id="panel-toggle" class="panel-toggle" aria-controls="panel" title="Settings">☰</button>
       <aside id="panel" class="panel">
+        <div class="panel-head">
+          <span>Settings</span>
+          <button id="panel-close" class="close" aria-label="Close settings">×</button>
+        </div>
         <details open>
           <summary>Time</summary>
           <label>Date and time (your browser's time zone)

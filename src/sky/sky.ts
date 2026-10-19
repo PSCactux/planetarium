@@ -331,9 +331,8 @@ export class Sky {
   }
 
   /** Finds the object closest to a screen point (CSS pixels). */
-  pick(x: number, y: number, width: number, height: number, groundOn: boolean): Target | null {
+  pick(x: number, y: number, width: number, height: number, groundOn: boolean, radius = 14): Target | null {
     const f = this.frame;
-    const radius = 14;
     let best: Target | null = null;
     let bestScore = Infinity;
     const consider = (t: Target, v: Vec3, mag: number) => {

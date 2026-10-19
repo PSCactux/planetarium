@@ -3,14 +3,31 @@ import { loadCatalogues } from './data';
 import { Sky, type Target } from './sky/sky';
 import { Overlay } from './sky/overlay';
 import { EYEPIECE_PRESETS, PLACES, SPEEDS, type AppState, applyQuery, defaultState } from './state';
-import { horizonVecToAltAz, precessRaDec } from './astro/coords';
-import { vecToSpherical, norm360 } from './astro/math';
-import { PLANETS, moonPhaseName } from './astro/solarsystem';
+import { horizonVecToAltAz, j2000ToHorizonMatrix, precessRaDec } from './astro/coords';
+import { vecToSpherical, norm360, mulMatVec } from './astro/math';
+import { PLANETS, moonPhaseName, sunPosition } from './astro/solarsystem';
+import { julianDate, lstDeg, ttFromUt } from './astro/time';
 import { telescopeStats } from './astro/optics';
 import { compass, formatDMS, formatDeg, formatRA, toLocalInput } from './ui/format';
 import { buildTour, defaultStop, stopMagnitude, targetKey, visibleStops, type TourStop } from './targets';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+
+function sunAltAt(time: number, lat: number, lon: number): number {
+  const jdUT = julianDate(new Date(time));
+  const jdTT = ttFromUt(jdUT);
+  const m = j2000ToHorizonMatrix(jdTT, lat, lstDeg(jdUT, lon));
+  return horizonVecToAltAz(mulMatVec(m, sunPosition(jdTT).dirJ2000)).alt;
+}
+
+/** First moment after `time` when the Sun is well below the horizon (dark sky), within two days. */
+function nextDark(time: number, lat: number, lon: number): number | null {
+  const step = 10 * 60 * 1000;
+  for (let t = time; t < time + 48 * 3600 * 1000; t += step) {
+    if (sunAltAt(t, lat, lon) < -15) return t + 30 * 60 * 1000;
+  }
+  return null; // midnight sun or polar day
+}
 
 async function main() {
   const state: AppState = applyQuery(defaultState(), location.search);
@@ -91,7 +108,8 @@ async function main() {
   const pointerUp = (e: PointerEvent) => {
     pointers.delete(e.pointerId);
     if (pointers.size === 0 && downAt && moved < 6) {
-      const picked = sky.pick(e.clientX, e.clientY, width, height, state.showGround);
+      // A fingertip is less precise than a mouse pointer.
+      const picked = sky.pick(e.clientX, e.clientY, width, height, state.showGround, e.pointerType === 'touch' ? 28 : 14);
       if (state.telescopeMode) {
         // In the eyepiece a click re-aims the telescope; a click on empty sky keeps the current target.
         if (picked) aimAt(picked);
@@ -130,8 +148,20 @@ async function main() {
 
   // ---------------------------------------------------------------- controls
   const panel = $('panel');
-  if (window.innerWidth < 640 || new URLSearchParams(location.search).get('panel') === '0') panel.classList.add('collapsed');
+  const panelParam = new URLSearchParams(location.search).get('panel');
+  if (panelParam === '0' || (window.innerWidth < 640 && panelParam !== '1')) panel.classList.add('collapsed');
   $('panel-toggle').addEventListener('click', () => panel.classList.toggle('collapsed'));
+  $('panel-close').addEventListener('click', () => panel.classList.add('collapsed'));
+
+  const dayHint = $('day-hint');
+  $('tonight').addEventListener('click', () => {
+    const t = nextDark(state.time, state.lat, state.lon);
+    if (t === null) return;
+    state.time = t;
+    state.speedIndex = 4;
+    state.playing = true;
+    syncControls();
+  });
 
   const speedSelect = $<HTMLSelectElement>('speed');
   SPEEDS.forEach((s, i) => speedSelect.add(new Option(s.label, String(i))));
@@ -410,7 +440,7 @@ async function main() {
   if (state.telescopeMode) setTelescope(true);
 
   // ---------------------------------------------------------------- loop
-  const clock = $('clock');
+  const clockLocal = $('clock-local'), clockUtc = $('clock-utc'), clockPlace = $('clock-place');
   let lastFrame = performance.now();
   let lastClock = -Infinity;
   let lastStops = -Infinity;
@@ -439,10 +469,10 @@ async function main() {
       const d = new Date(state.time);
       const lat = `${Math.abs(state.lat).toFixed(2)}°${state.lat >= 0 ? 'N' : 'S'}`;
       const lon = `${Math.abs(state.lon).toFixed(2)}°${state.lon >= 0 ? 'E' : 'W'}`;
-      clock.textContent =
-        `${d.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'medium' })} (browser time)\n` +
-        `${d.toISOString().slice(0, 19).replace('T', ' ')} UTC · LST ${formatRA(f.lst).slice(0, 7)}\n` +
-        `${state.placeName} ${lat} ${lon} · Sun ${formatDeg(f.sunAlt)}`;
+      clockLocal.textContent = d.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'medium' });
+      clockUtc.textContent = `${d.toISOString().slice(0, 19).replace('T', ' ')} UTC · LST ${formatRA(f.lst).slice(0, 7)}`;
+      clockPlace.textContent = `${state.placeName} ${lat} ${lon} · Sun ${formatDeg(f.sunAlt)}`;
+      dayHint.hidden = state.telescopeMode || f.daylight < 0.5;
       if (document.activeElement !== dt) dt.value = toLocalInput(state.time);
     }
     requestAnimationFrame(frame);
