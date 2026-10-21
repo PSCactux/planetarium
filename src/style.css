@@ -164,60 +164,171 @@ body.scope-mode .info { left: auto; right: calc(16px + env(safe-area-inset-right
   .gear { width: 300px; }
 }
 
+/* Phone-only controls are hidden on larger screens */
+.tabbar, .timesheet, .gyro-ui, .sheet-grip, .gear-quick, .info-more, .search-cancel, .search-backdrop { display: none; }
+.search-results .s-head { padding: 8px 10px 4px; color: var(--accent); font-size: 11px; font-weight: 650;
+  letter-spacing: 0.1em; text-transform: uppercase; cursor: default; }
+.search-results .s-head:hover { background: none; }
+.guide-open { margin-top: 12px; }
+
 @media (max-width: 640px) {
-  /* Header: date, time and place only; UTC and sidereal time stay on larger screens. */
-  .hud { left: calc(12px + env(safe-area-inset-left)); right: 164px; }
+  :root { --tabbar-h: calc(60px + env(safe-area-inset-bottom)); }
+
+  /* Header: compact, the actions live in the tab bar. */
+  .hud { left: calc(14px + env(safe-area-inset-left)); right: 14px; top: calc(10px + env(safe-area-inset-top)); }
+  .hud::before { content: ''; position: fixed; z-index: -1; left: 0; right: 0; top: 0; height: calc(96px + env(safe-area-inset-top));
+    background: linear-gradient(rgba(5, 7, 13, 0.92), rgba(5, 7, 13, 0.6) 60%, rgba(5, 7, 13, 0)); }
   .brand { font-size: 11px; }
-  .clock { font-size: 12px; }
+  .clock { font-size: 12px; line-height: 1.4; }
   .clock-note, .clock-utc { display: none !important; }
-  .top-actions { right: calc(10px + env(safe-area-inset-right)); top: calc(10px + env(safe-area-inset-top)); }
-  .top-actions .icon-btn { width: 44px; height: 44px; }
-  .search input { position: fixed; left: 10px; right: 10px; top: calc(62px + env(safe-area-inset-top)); width: auto; height: 46px; font-size: 16px; }
-  .search-results { position: fixed; left: 10px; right: 10px; top: calc(114px + env(safe-area-inset-top)); width: auto; }
+  .top-actions { display: none; }
+  .timebar { display: none; }
+  .day-hint { top: auto; bottom: calc(var(--tabbar-h) + 14px); }
+  body.sheet-open .day-hint, body.search-open .day-hint { display: none; }
 
-  .day-hint { top: auto; bottom: calc(var(--timebar-h, 56px) + 44px + env(safe-area-inset-bottom)); }
+  /* Tab bar */
+  .tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; z-index: 8; left: 0; right: 0; bottom: 0;
+    height: var(--tabbar-h); padding: 6px 4px env(safe-area-inset-bottom); background: rgba(9, 12, 21, 0.94);
+    border-top: 1px solid var(--border); backdrop-filter: blur(14px); }
+  .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 48px;
+    padding: 0; border: 0; border-radius: 12px; background: transparent; color: var(--muted); font-size: 10.5px; font-weight: 550;
+    letter-spacing: 0.01em; -webkit-tap-highlight-color: transparent; }
+  .tab:hover { background: transparent; }
+  .tab svg { width: 23px; height: 23px; }
+  .tab.active, .tab.active:hover { color: var(--accent); background: transparent; border: 0; }
+  .tab.active svg { filter: drop-shadow(0 0 6px rgba(255, 200, 97, 0.45)); }
+  .tab-main svg { width: 25px; height: 25px; }
 
-  /* Time bar: one row of thumb-sized buttons; the speed floats above it as a small badge. */
-  .timebar { bottom: calc(10px + env(safe-area-inset-bottom)); gap: 6px; padding: 6px; max-width: calc(100vw - 20px); }
-  .timebar button { min-width: 44px; min-height: 44px; padding: 0 10px; font-size: 15px; }
-  .speed { position: absolute; top: -26px; left: 50%; transform: translateX(-50%); min-width: 0; padding: 2px 10px;
-    font-size: 11px; white-space: nowrap; background: var(--panel); border: 1px solid var(--border); border-radius: 999px; }
-  .scope-bar { flex-basis: 100%; justify-content: center; }
-  .scope-bar select { max-width: none; flex: 1; min-height: 44px; }
+  /* Bottom sheets */
+  .sheet-grip { display: block; width: 100%; height: 22px; flex: none; cursor: grab; touch-action: none; position: relative; }
+  .sheet-grip::before { content: ''; position: absolute; left: 50%; top: 8px; width: 38px; height: 4px; margin-left: -19px;
+    border-radius: 4px; background: rgba(255, 255, 255, 0.22); }
+  .panel, .timesheet, .gear, .info, body.scope-mode .info {
+    position: fixed; left: 0; right: 0; top: auto; width: auto; margin: 0; border-radius: 20px 20px 0 0;
+    border: 1px solid var(--border-strong); border-bottom: 0; background: var(--panel-solid); backdrop-filter: blur(14px);
+    box-shadow: 0 -14px 40px rgba(0, 0, 0, 0.5); transition: transform 0.22s ease; }
+  @keyframes sheet-in { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
 
-  /* Settings as a bottom sheet over everything else. */
-  .panel { position: fixed; z-index: 5; left: 0; right: 0; bottom: 0; top: auto; width: auto; max-height: 72dvh;
-    border-radius: 18px 18px 0 0; border-bottom: 0; padding: 0 16px calc(16px + env(safe-area-inset-bottom));
-    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.5); background: var(--panel-solid); }
-  .panel-head { display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1;
-    margin: 0 -16px; padding: 12px 16px 10px; background: var(--panel-solid); border-bottom: 1px solid var(--border); font-weight: 600; }
-  .panel-head .close { width: 40px; height: 40px; padding: 0; font-size: 20px; }
+  /* Settings: a tall sheet above the tab bar. */
+  .panel { z-index: 7; bottom: var(--tabbar-h); max-height: calc(100dvh - var(--tabbar-h) - 70px); padding: 0 16px 16px;
+    animation: sheet-in 0.22s ease; }
+  .panel-head { display: flex; justify-content: space-between; align-items: center; position: sticky; top: 22px; z-index: 1;
+    margin: 0 -16px; padding: 0 16px 10px; background: var(--panel-solid); border-bottom: 1px solid var(--border);
+    font-weight: 650; font-size: 16px; }
+  .panel .sheet-grip { position: sticky; top: 0; z-index: 2; margin: 0 -16px; background: var(--panel-solid); }
+  .panel-head .close { width: 36px; height: 36px; padding: 0; font-size: 20px; border-radius: 50%; }
   .panel details { padding: 12px 0; }
-  .panel summary { padding: 4px 0; }
+  .panel summary { padding: 4px 0; font-size: 14px; }
   .panel label { font-size: 13px; }
-  .panel label.check { padding: 8px 0; margin-top: 2px; font-size: 15px; }
-  .panel input[type='checkbox'] { width: 20px; height: 20px; }
-  /* 16px stops iOS from zooming into a field when it gets focus. */
-  input, select { font-size: 16px; padding: 8px 10px; }
-  .panel button { min-height: 40px; }
+  .panel label.check { padding: 9px 0; margin-top: 0; font-size: 15px; }
+  .panel input[type='checkbox'] { width: 22px; height: 22px; }
+  input, select { font-size: 16px; padding: 9px 11px; } /* 16px: no zoom on focus in iOS */
+  .panel button { min-height: 44px; }
 
-  /* Equipment: a folded bar above the time bar that opens into a sheet. */
-  .gear { left: 10px; right: 10px; top: auto; width: auto; bottom: calc(var(--timebar-h, 56px) + 40px + env(safe-area-inset-bottom));
-    max-height: 58dvh; background: var(--panel-solid); }
-  .gear-head { padding: 10px 12px; }
-  .chip { min-height: 40px; min-width: 48px; }
+  /* Time sheet */
+  .timesheet { display: block; z-index: 7; bottom: var(--tabbar-h); padding: 0 18px 18px; animation: sheet-in 0.22s ease; }
+  .timesheet[hidden] { display: none; }
+  .ts-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .ts-time { margin: 0; font-size: 34px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.1; }
+  .ts-date { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  .ts-date::first-letter { text-transform: uppercase; }
+  .ts-play { display: grid; place-items: center; width: 56px; height: 56px; padding: 0; border-radius: 50%; flex: none;
+    background: var(--accent); border-color: var(--accent); color: #1d1407; }
+  .ts-play:hover { background: #ffd789; }
+  .ts-play svg { width: 24px; height: 24px; }
+  .ts-jog { position: relative; margin-top: 16px; height: 58px; border-radius: 14px; overflow: hidden; touch-action: none;
+    background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border); display: grid; place-items: center; cursor: ew-resize; }
+  .ts-ticks { position: absolute; inset: 0;
+    background-image: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.22) 0 1px, transparent 1px 12px),
+      repeating-linear-gradient(90deg, rgba(255, 200, 97, 0.55) 0 2px, transparent 2px 72px);
+    background-size: 100% 40%, 100% 70%; background-repeat: repeat-x; background-position-y: center, center; opacity: 0.7;
+    mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); }
+  .ts-jog::after { content: ''; position: absolute; left: 50%; top: 8px; bottom: 8px; width: 2px; margin-left: -1px;
+    border-radius: 2px; background: var(--accent); box-shadow: 0 0 10px rgba(255, 200, 97, 0.7); }
+  .ts-jog-label { position: relative; z-index: 1; margin-top: 34px; color: var(--muted); font-size: 11px; letter-spacing: 0.02em;
+    pointer-events: none; }
+  .ts-jog.dragging { border-color: var(--accent); }
+  .ts-speeds { display: flex; gap: 6px; margin-top: 12px; overflow-x: auto; scrollbar-width: none; }
+  .ts-speeds::-webkit-scrollbar { display: none; }
+  .ts-speeds .chip { flex: 1 1 auto; min-width: 0; min-height: 40px; padding: 0 6px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .ts-actions { display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px; margin-top: 10px; }
+  .ts-actions button { min-height: 46px; justify-content: center; font-size: 15px; font-weight: 600; }
 
-  /* Info card: above the time bar (and the equipment bar), never taller than a third of the screen. */
-  .info, body.scope-mode .info { left: 10px; right: 10px; width: auto; max-height: 36dvh; overflow: auto;
-    bottom: calc(var(--timebar-h, 56px) + 42px + env(safe-area-inset-bottom)); }
-  body.scope-mode .info { bottom: calc(var(--timebar-h, 56px) + var(--gear-h, 60px) + 50px + env(safe-area-inset-bottom)); }
-  .info .close { width: 36px; height: 36px; font-size: 18px; }
-  .actions button { min-height: 40px; }
-  /* In the eyepiece on a phone the full card would cover the target: keep only name and actions. */
-  body.scope-mode .info .stats { display: none; }
-  /* While the equipment sheet is open it has the screen to itself. */
-  body.scope-mode.gear-open .info { display: none; }
+  /* Search: a full-screen sheet */
+  .search-backdrop { display: block; position: fixed; inset: 0; z-index: 9; background: rgba(3, 5, 10, 0.75);
+    backdrop-filter: blur(6px); opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+  body.search-open .search-backdrop { opacity: 1; pointer-events: auto; }
+  body.search-open .top-actions { display: flex; z-index: 10; }
+  body.search-open .top-actions > .icon-btn { display: none; }
+  .search input { position: fixed; left: 12px; right: 96px; top: calc(12px + env(safe-area-inset-top)); width: auto; height: 46px;
+    font-size: 16px; border-radius: 14px; }
+  .search-cancel { position: fixed; right: 10px; top: calc(12px + env(safe-area-inset-top)); height: 46px; padding: 0 12px;
+    background: transparent; border: 0; color: var(--accent); font-weight: 600; font-size: 15px; }
+  .search.open .search-cancel { display: block; }
+  .search-results { position: fixed; left: 0; right: 0; top: calc(68px + env(safe-area-inset-top)); bottom: 0; width: auto;
+    max-height: none; overflow: auto; border: 0; border-radius: 0; background: transparent; box-shadow: none;
+    padding: 4px 8px calc(16px + env(safe-area-inset-bottom)); }
+  .search.open .search-results { display: block; }
+  .search-results li { padding: 12px 12px; border-radius: 12px; }
+  .search-results .s-label { font-size: 16px; }
+  .search-results .s-sub { font-size: 13px; }
+  .search-results .s-head { padding: 14px 12px 6px; }
+
+  /* Point your phone */
+  .gyro-ui { display: block; }
+  .gyro-ui[hidden] { display: none; }
+  .gyro-btn { position: fixed; z-index: 5; right: 14px; bottom: calc(var(--tabbar-h) + 14px); display: grid; place-items: center;
+    width: 52px; height: 52px; padding: 0; border-radius: 50%; background: var(--panel-solid); border-color: var(--border-strong);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
+  .gyro-btn svg { width: 24px; height: 24px; }
+  .gyro-btn.active { background: var(--accent); border-color: var(--accent); color: #1d1407; }
+  .gyro-pill { position: fixed; z-index: 5; left: 14px; right: 80px; bottom: calc(var(--tabbar-h) + 20px); min-height: 40px;
+    border-radius: 999px; background: rgba(255, 200, 97, 0.16); border-color: var(--accent); color: #ffe2a6; font-size: 13px;
+    font-weight: 550; }
+  body.sheet-open .gyro-ui, body.search-open .gyro-ui { display: none; }
+
+  /* Object card: compact above the tab bar; details on demand. */
+  .info, body.scope-mode .info { z-index: 6; bottom: var(--tabbar-h); max-height: 62dvh; overflow: auto; padding: 0 16px 14px;
+    animation: sheet-in 0.22s ease; }
+  .info .sheet-grip { margin: 0 -16px; }
+  .info h2 { font-size: 19px; }
+  .info .close { top: 18px; right: 12px; width: 34px; height: 34px; border-radius: 50%; font-size: 18px; }
+  .info .stats { display: none; }
+  .info.expanded .stats { display: table; }
+  .info-more { display: inline-flex; }
+  .info-more[hidden] { display: none; }
+  .actions { flex-wrap: wrap; gap: 8px; }
+  .actions button { min-height: 42px; }
+  .actions label { margin-left: 0; }
+  .info .actions .info-more { margin-left: auto; }
+  body.sheet-open .info, body.search-open .info { display: none; }
+  body.info-open .gyro-ui { display: none; }
+
+  /* Telescope: equipment sheet (folded: header + quick eyepieces) and target selector above it. */
+  .gear { z-index: 6; bottom: var(--tabbar-h); max-height: calc(100dvh - var(--tabbar-h) - 90px); }
+  .gear .sheet-grip { height: 18px; }
+  .gear .sheet-grip::before { top: 7px; }
+  .gear-head { padding: 0 16px 6px; }
+  .gear-head .gear-chevron { display: none; }
+  .gear-quick { display: flex; gap: 6px; overflow-x: auto; padding: 4px 16px 12px; scrollbar-width: none; }
+  .gear-quick::-webkit-scrollbar { display: none; }
+  .gear-quick[hidden] { display: none; }
+  .gear-quick .chip { flex: none; min-height: 40px; min-width: 52px; }
+  .gear-quick .chip.barlow { border-style: dashed; }
+  .gear:not(.collapsed) .gear-quick { display: none; }
+  .gear-body { padding: 0 16px 16px; }
+  .chip { min-height: 42px; min-width: 50px; }
+  .scope-bar { position: fixed; z-index: 6; left: 12px; right: 12px; bottom: calc(var(--tabbar-h) + var(--gear-h, 110px) + 10px);
+    display: flex; gap: 8px; }
+  .scope-bar[hidden], body.gear-open .scope-bar { display: none; }
+  .scope-bar button { width: 46px; min-height: 46px; padding: 0; border-radius: 50%; background: var(--panel-solid);
+    border-color: var(--border-strong); font-size: 22px; line-height: 1; }
+  .scope-bar select { flex: 1; min-height: 46px; max-width: none; border-radius: 999px; text-align: center; text-align-last: center;
+    background: var(--panel-solid); border-color: var(--border-strong); font-weight: 600; }
+  /* In the eyepiece the target selector already names the object: the card would only hide the view. */
+  body.scope-mode .info { display: none; }
 }
+
 
 /* Language row in the settings */
 .lang-row { margin-top: 12px !important; }

@@ -1,7 +1,6 @@
 // Interface texts in English, Spanish and Catalan. Each message is [en, es, ca]; `{name}`
 // placeholders are filled in by t(). The language comes from ?lang=, then the choice saved in
-// the browser (shared with the rest of the site under the same address), then the browser's
-// own languages.
+// the browser, then the browser's own languages.
 
 export const LANGS = ['en', 'es', 'ca'] as const;
 export type Lang = (typeof LANGS)[number];
@@ -19,7 +18,7 @@ const M = {
   'clock.browser': ['(browser time)', '(hora del navegador)', '(hora del navegador)'],
   'clock.sun': ['Sun {alt}', 'Sol {alt}', 'Sol {alt}'],
   'top.search': ['Search (/)', 'Buscar (/)', 'Cercar (/)'],
-  'top.settings': ['Settings', 'Ajustes', 'Configuració'],
+  'top.settings': ['Settings', 'Ajustes', 'Ajustos'],
   'top.guide': ['Quick guide', 'Guía rápida', 'Guia ràpida'],
   'search.placeholder': ['Search: Jupiter, M31, Vega…', 'Buscar: Júpiter, M31, Vega…', 'Cerca: Júpiter, M31, Vega…'],
   'search.aria': ['Search the sky', 'Buscar en el cielo', 'Cercar al cel'],
@@ -27,6 +26,26 @@ const M = {
   'search.moon': ['Our satellite', 'Nuestro satélite', 'El nostre satèl·lit'],
   'day.hint': ['Daylight hides the stars.', 'La luz del día oculta las estrellas.', 'La llum del dia amaga les estrelles.'],
   'day.tonight': ["See tonight's sky", 'Ver el cielo de esta noche', "Veure el cel d'aquesta nit"],
+
+  // Tab bar (phones)
+  'tab.sky': ['Sky', 'Cielo', 'Cel'],
+  'tab.search': ['Search', 'Buscar', 'Cercar'],
+  'tab.scope': ['Telescope', 'Telescopio', 'Telescopi'],
+  'tab.time': ['Time', 'Tiempo', 'Temps'],
+  'tab.more': ['Settings', 'Ajustes', 'Ajustos'],
+  'time.drag': ['Drag to travel in time', 'Arrastra para viajar en el tiempo', 'Arrossega per viatjar en el temps'],
+  'search.cancel': ['Cancel', 'Cancelar', 'Cancel·lar'],
+  'search.visible': ['Visible now', 'Visible ahora', 'Visible ara'],
+  'search.where': ['{alt}° high · {dir}', '{alt}° de altura · {dir}', '{alt}° d\'alçada · {dir}'],
+  'gyro.start': ['Point your phone at the sky', 'Apunta el móvil al cielo', 'Apunta el mòbil al cel'],
+  'gyro.active': ['Following your phone · tap to stop', 'Siguiendo tu móvil · toca para parar', 'Seguint el teu mòbil · toca per aturar'],
+  'gyro.denied': [
+    'Motion sensors are not available or permission was denied.',
+    'Los sensores de movimiento no están disponibles o se ha denegado el permiso.',
+    "Els sensors de moviment no estan disponibles o s'ha denegat el permís.",
+  ],
+  'info.more': ['Details', 'Detalles', 'Detalls'],
+  'info.less': ['Less', 'Menos', 'Menys'],
 
   // Time bar
   'time.controls': ['Time controls', 'Control del tiempo', 'Control del temps'],
@@ -280,6 +299,12 @@ const M = {
     "Arrossega el cel per mirar al voltant i fes servir la roda o pessiga per apropar-t'hi. Prem qualsevol estrella, planeta o galàxia per saber què és. Prova-ho ara.",
   ],
   'guide.niceDrag': ['That’s it!', '¡Eso es!', 'Així mateix!'],
+  'guide.gyroTitle': ['Point your phone', 'Apunta con el móvil', 'Apunta amb el mòbil'],
+  'guide.gyro': [
+    'Tap here and hold your phone up: the screen shows the part of the sky it is pointing at.',
+    'Toca aquí y levanta el móvil: la pantalla muestra la parte del cielo a la que apunta.',
+    'Toca aquí i aixeca el mòbil: la pantalla mostra la part del cel on apunta.',
+  ],
   'guide.searchTitle': ['Find anything', 'Encuentra lo que quieras', 'Troba el que vulguis'],
   'guide.search': [
     'Search for a planet, star or galaxy by name or number: Jupiter, Vega, M31…',
@@ -409,7 +434,8 @@ const NOTES: Record<string, [string, string]> = {
   c11: ['Un Schmidt-Cassegrain de 11 pulgadas para observar en serio.', 'Un Schmidt-Cassegrain de 11 polzades per observar seriosament.'],
 };
 
-const STORAGE_KEY = 'lang'; // shared with the home page of the site
+// A plain, generic key: other pages served from the same origin can share the choice.
+const STORAGE_KEY = 'lang';
 let current: Lang = detect();
 const listeners: (() => void)[] = [];
 

@@ -128,11 +128,56 @@ export class GearPanel {
       const mag = (native * e.barlow) / ep.focalLength;
       b.classList.toggle('over', mag > stats.maxUsefulMagnification * 1.02);
     }
+    this.renderQuick();
     for (const b of document.querySelectorAll<HTMLButtonElement>('#gear-barlows .chip')) {
       b.classList.toggle('active', Number(b.dataset.barlow) === e.barlow);
       if (b.dataset.barlow === '1') b.textContent = txt('gear.none');
     }
     this.renderReadouts();
+  }
+
+  /** Phones: eyepieces and Barlow in one scrollable row under the folded panel's header. */
+  private renderQuick(): void {
+    const e = this.state.equipment;
+    const quick = $('gear-quick');
+    const fixed = Boolean(findTelescope(e.telescopeId)?.fixed);
+    quick.hidden = fixed;
+    if (fixed) return;
+    if (!quick.childElementCount) {
+      for (const ep of EYEPIECES) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'chip';
+        b.dataset.id = ep.id;
+        b.innerHTML = `${ep.focalLength}<small>mm</small>`;
+        b.addEventListener('click', () => { this.state.equipment.eyepieceId = ep.id; this.changed(); });
+        quick.append(b);
+      }
+      for (const x of BARLOWS.slice(1)) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'chip barlow';
+        b.dataset.barlow = String(x);
+        b.textContent = `×${x}`;
+        b.addEventListener('click', () => {
+          this.state.equipment.barlow = (this.state.equipment.barlow === x ? 1 : x) as Barlow;
+          this.changed();
+        });
+        quick.append(b);
+      }
+    }
+    const tel = this.state.telescope;
+    const max = telescopeStats(tel).maxUsefulMagnification;
+    const native = tel.nativeFocalLength ?? tel.focalLength;
+    for (const b of quick.querySelectorAll<HTMLButtonElement>('.chip')) {
+      if (b.dataset.id) {
+        b.classList.toggle('active', b.dataset.id === e.eyepieceId);
+        const ep = EYEPIECES.find((x) => x.id === b.dataset.id)!;
+        b.classList.toggle('over', (native * e.barlow) / ep.focalLength > max * 1.02);
+      } else {
+        b.classList.toggle('active', Number(b.dataset.barlow) === e.barlow);
+      }
+    }
   }
 
   private renderReadouts(): void {

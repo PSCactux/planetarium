@@ -387,6 +387,7 @@ export class Sky {
     this.camera.up.set(0, 1, 0);
     this.camera.lookAt(dir[0], dir[1], dir[2]);
     if (orientation === 'rotated') this.camera.rotateZ(Math.PI);
+    if (state.roll) this.camera.rotateZ(state.roll);
     this.camera.updateMatrixWorld();
     return this.frame;
   }

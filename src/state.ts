@@ -96,6 +96,8 @@ export interface AppState {
   az: number;
   alt: number;
   fov: number;
+  /** Rotation of the view around its axis, radians (set while following the phone). */
+  roll: number;
   showLines: boolean;
   showConstellationNames: boolean;
   showStarNames: boolean;
@@ -130,6 +132,7 @@ export function defaultState(): AppState {
     az: 180,
     alt: 35,
     fov: 70,
+    roll: 0,
     showLines: true,
     showConstellationNames: true,
     showStarNames: true,

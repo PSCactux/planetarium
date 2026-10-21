@@ -16,7 +16,8 @@ import { LANGS, type Lang, type MsgKey, applyStatic, lang, langName, locale, loc
 import { Guide } from './ui/guide';
 import { BARLOWS, findTelescope, EYEPIECES, type Equipment } from './equipment';
 import { GearPanel } from './ui/gear';
-import { buildSearchIndex, setupSearch } from './ui/search';
+import { buildSearchIndex, setupSearch, type Highlight } from './ui/search';
+import { MobileShell, PHONE } from './ui/mobile';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -117,7 +118,10 @@ async function main() {
     state.alt = clampAlt(state.alt + dy * k * (o === 'rotated' ? -1 : 1));
     tracking = false;
     $<HTMLInputElement>('info-track').checked = false;
+    mobile?.stopGyro();
   };
+  // Set up further down; the view handlers only use it once the page is running.
+  let mobile: MobileShell | undefined;
 
   glCanvas.addEventListener('pointerdown', (e) => {
     glCanvas.setPointerCapture(e.pointerId);
@@ -193,7 +197,7 @@ async function main() {
   const panelParam = new URLSearchParams(location.search).get('panel');
   if (panelParam === '0' || (window.innerWidth < 640 && panelParam !== '1')) panel.classList.add('collapsed');
   $('panel-toggle').addEventListener('click', () => panel.classList.toggle('collapsed'));
-  $('panel-close').addEventListener('click', () => panel.classList.add('collapsed'));
+  $('panel-close').addEventListener('click', () => { if (!PHONE.matches) panel.classList.add('collapsed'); });
 
   const dayHint = $('day-hint');
   $('tonight').addEventListener('click', () => {
@@ -342,20 +346,20 @@ async function main() {
   $('scope-prev').addEventListener('click', () => stepTarget(-1));
   $('scope-next').addEventListener('click', () => stepTarget(1));
 
-  // The settings panel and the equipment panel compete for space on smaller desktops.
+  // The equipment panel and the info card take the sides in the telescope view: the settings step aside.
   let panelWasOpen = false;
   const setTelescope = (on: boolean) => {
     if (on === state.telescopeMode && on) return;
     state.telescopeMode = on;
     if (on) {
       panelWasOpen = !panel.classList.contains('collapsed');
-      if (window.innerWidth < 1200) panel.classList.add('collapsed');
+      panel.classList.add('collapsed');
       // Like a finder scope: keep the selected object if it is up, otherwise go to Vega or whatever is visible.
       refreshStops();
       const keep = selection && selection.kind !== 'sun' && horizonVecToAltAz(sky.targetVec(selection)).alt > 0;
       const target = keep ? selection : defaultStop(visible, sky.frame.daylight, (s) => stopMagnitude(s, sky, stars))?.target;
       if (target) aimAt(target);
-    } else if (panelWasOpen) {
+    } else if (panelWasOpen && !PHONE.matches) {
       panel.classList.remove('collapsed');
     }
     syncControls();
@@ -378,6 +382,7 @@ async function main() {
     $('gear').hidden = !state.telescopeMode;
     document.body.classList.toggle('scope-mode', state.telescopeMode);
     gear.sync();
+    mobile?.sync();
   }
 
   // ---------------------------------------------------------------- info card
@@ -409,8 +414,10 @@ async function main() {
     if (!force && now - lastInfo < 250) return;
     lastInfo = now;
     info.hidden = !selection;
+    document.body.classList.toggle('info-open', !!selection);
     if (!selection) return;
     $('info-scope').hidden = state.telescopeMode || selection.kind === 'sun';
+    $('info-more').hidden = !PHONE.matches;
     const f = sky.frame;
     const v = sky.targetVec(selection);
     const { alt, az } = horizonVecToAltAz(v);
@@ -464,7 +471,19 @@ async function main() {
   }
 
   // ---------------------------------------------------------------- search
-  setupSearch(sky, buildSearchIndex(stars, dso), (target) => {
+  /** What is up right now, for the empty search box: the Moon, planets and showpieces. */
+  function highlights(): Highlight[] {
+    const all = visibleStops(tour, sky, stars).slice(0, 12);
+    return all.map((stop) => {
+      const { alt, az } = horizonVecToAltAz(sky.targetVec(stop.target));
+      const kind = stop.target.kind === 'planet' ? t('info.planet') : stop.target.kind === 'star' ? t('info.star')
+        : stop.target.kind === 'dso' ? t(`kind.${dso[stop.target.index].kind}` as MsgKey) : '';
+      const where = t('search.where', { alt: num(alt), dir: localCompass(compass(az)) });
+      return { target: stop.target, label: targetLabel(stop.target), sub: kind ? `${kind} · ${where}` : where };
+    });
+  }
+
+  const searchUi = setupSearch(sky, buildSearchIndex(stars, dso), (target) => {
     if (state.telescopeMode) { aimAt(target); return; }
     selection = target;
     tracking = true;
@@ -475,7 +494,7 @@ async function main() {
     sky.update(state, width, height);
     centerOn(target);
     updateInfo(true);
-  });
+  }, highlights);
 
   // Optional ?target=moon|jupiter|sirius|m31|ngc 5139|omega centauri selects, centres and tracks an object.
   const targetName = new URLSearchParams(location.search).get('target')?.toLowerCase().trim();
@@ -507,7 +526,7 @@ async function main() {
     const narrow = width < 640;
     const top = hud.getBoundingClientRect().bottom + (narrow ? 44 : 30);
     // On desktop the equipment panel and the info card sit at the sides; on phones they stack below.
-    const below = narrow ? [timebar, $('gear'), info] : [timebar];
+    const below = narrow ? [$('tabbar'), $('gear'), $('scope-bar')] : [timebar];
     let bottom = height;
     for (const el of below) {
       if (el.hidden || el.offsetParent === null) continue;
@@ -542,14 +561,30 @@ async function main() {
     lastClock = -Infinity;
   });
 
+  // ---------------------------------------------------------------- phones
+  mobile = new MobileShell({
+    state,
+    setTelescope,
+    syncControls,
+    placeLabel,
+    nextDark: () => nextDark(state.time, state.lat, state.lon),
+    openSearch: () => searchUi.open(),
+    closeSearch: () => searchUi.close(),
+    stopTracking: () => { tracking = false; $<HTMLInputElement>('info-track').checked = false; },
+    closeInfo: () => { selection = null; tracking = false; updateInfo(true); },
+  });
+  const shell = mobile;
+
   // ---------------------------------------------------------------- quick guide
   const guide = new Guide({
     placeLabel,
     setTelescope: (on: boolean) => setTelescope(on),
     isTelescope: () => state.telescopeMode,
-    closePanels: () => panel.classList.add('collapsed'),
+    closePanels: () => { panel.classList.add('collapsed'); shell.closeSheets(); searchUi.close(); },
+    phone: () => PHONE.matches,
   });
   $('guide-toggle').addEventListener('click', () => guide.start());
+  $('guide-open').addEventListener('click', () => guide.start());
   // First visit: offer the guide, unless the page was opened on a shared view.
   const q = new URLSearchParams(location.search);
   const sharedView = ['target', 'scope', 't', 'guide'].some((k) => q.has(k));
@@ -568,7 +603,7 @@ async function main() {
     lastFrame = now;
     if (state.playing) state.time += dtSec * 1000 * SPEEDS[state.speedIndex].rate;
 
-    if (tracking && selection) {
+    if (tracking && selection && !mobile?.gyro.running) {
       sky.update(state, width, height);
       centerOn(selection);
     }
@@ -605,7 +640,8 @@ async function main() {
       clockLocal.textContent = d.toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'medium' });
       clockUtc.textContent = `${d.toISOString().slice(0, 19).replace('T', ' ')} UTC · LST ${formatRA(f.lst).slice(0, 7)}`;
       clockPlace.textContent = `${placeLabel()} ${lat} ${lon} · ${t('clock.sun', { alt: `${num(f.sunAlt, 1)}°` })}`;
-      dayHint.hidden = state.telescopeMode || f.daylight < 0.5;
+      dayHint.hidden = state.telescopeMode || f.daylight < 0.5 || document.body.classList.contains('sheet-open');
+      shell.tick();
       if (document.activeElement !== dt) dt.value = toLocalInput(state.time);
     }
     requestAnimationFrame(frame);

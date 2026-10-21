@@ -33,6 +33,8 @@ Built with Vite, TypeScript and three.js. No backend, no tracking, no API keys.
 - **English, Spanish and Catalan.** The language follows the browser and can be changed in the settings or with `?lang=es`; numbers, dates and compass points follow it too, and searches work with the names of any of the three languages.
 - **Quick guide.** On the first visit a seven-step tour lights up each part of the screen (drag the sky, search, time, settings, telescope, equipment, targets); some steps are completed by doing the thing itself. The `?` button replays it.
 - **Starts near you.** Without asking for your location, the first view uses a city in your browser's time zone; the settings have presets, coordinates and geolocation.
+- **Made for phones.** On small screens a tab bar (Sky, Search, Telescope, Time, Settings) replaces the floating panels, and every panel is a bottom sheet that can be dragged down to close. Search opens full screen and, before you type, lists what is visible right now with its height and direction. The time sheet has a jog strip: drag it left or right to move through the night. The equipment folds into a strip of eyepieces under the eyepiece view, and the target selector sits right above it.
+- **Point your phone at the sky.** On phones with motion sensors, a button makes the view follow the phone's orientation (compass heading on iOS, absolute orientation on Android), with the horizon kept level as you turn it.
 - **Search.** Type a name or number (Jupiter, Vega, M31, NGC 5139, Omega…) or press `/`. Results say when something is below the horizon.
 - **Telescope targets.** Switching to the telescope view always aims at something: the selected object if it is up, otherwise Vega at night or the brightest visible object in daylight, and the view then tracks it. A selector in the bottom bar (or the `[` and `]` keys) steps through the targets that are currently above the horizon, away from the Sun and bright enough to see: the Moon, the planets, about 25 classic eyepiece stars such as Albireo and Mizar, and the best-known deep-sky objects (at night). Clicking an object inside the eyepiece re-aims the telescope at it.
 - Shareable views through the query string, for example
@@ -108,9 +110,9 @@ The code is MIT licensed (see `LICENSE`).
 
 ```
 src/
-  astro/        time, coordinates, precession, Sun/Moon/planets, planet orientation, Jupiter's moons, optics (pure TS, unit tested)
+  astro/        time, coordinates, precession, Sun/Moon/planets, planet orientation, Jupiter's moons, optics, phone pointing (pure TS, unit tested)
   sky/          three.js scene, star and sky shaders, Milky Way, deep-sky objects, textured bodies, 2D labels and eyepiece overlay
-  ui/           formatting helpers, equipment panel, search, quick guide
+  ui/           formatting helpers, equipment panel, search, quick guide, phone layout, bottom sheets, motion sensors
   data.ts       loads public/data/*.json
   equipment.ts  telescope, eyepiece and Barlow catalogue
   i18n.ts       interface texts in English, Spanish and Catalan

@@ -19,6 +19,10 @@
       <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="7" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="17" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
       <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17.2" r="1.2" fill="currentColor"/></symbol>
+      <symbol id="i-sky" viewBox="0 0 24 24"><path d="M12 3.5l1.6 4.2 4.4.2-3.4 2.8 1.2 4.3L12 12.6 8.2 15l1.2-4.3L6 7.9l4.4-.2L12 3.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M4 20h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="19" cy="4.5" r="1" fill="currentColor"/><circle cx="4.5" cy="12" r="1" fill="currentColor"/></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M10.5 18.5h3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M2.5 9a6 6 0 0 1 2-4M21.5 9a6 6 0 0 0-2-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+      <symbol id="i-moonset" viewBox="0 0 24 24"><path d="M15 4a7 7 0 1 0 5 12.2A8 8 0 0 1 15 4Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
       <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6-5.6-6-11a6 6 0 1 1 12 0c0 5.4-6 11-6 11Z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="10" r="2.2" fill="currentColor"/></symbol>
     </svg>
 
@@ -35,9 +39,11 @@
         </div>
       </header>
 
+      <div id="search-backdrop" class="search-backdrop"></div>
       <div class="top-actions">
         <div id="search" class="search">
           <input id="search-input" type="search" placeholder="Search: Jupiter, M31, Vega…" data-i18n-placeholder="search.placeholder" data-i18n-aria="search.aria" autocomplete="off" spellcheck="false" aria-label="Search the sky" aria-controls="search-results" />
+          <button id="search-cancel" class="search-cancel" type="button" data-i18n="search.cancel">Cancel</button>
           <ul id="search-results" class="search-results" role="listbox"></ul>
         </div>
         <button id="search-toggle" class="icon-btn" aria-label="Search (/)" title="Search (/)" data-i18n-title="top.search" data-i18n-aria="top.search" aria-expanded="false"><svg><use href="#i-search"/></svg></button>
@@ -65,12 +71,14 @@
       </div>
 
       <section id="gear" class="gear" hidden aria-label="Telescope and eyepiece" data-i18n-aria="gear.aria">
+        <div class="sheet-grip" id="gear-grip" aria-hidden="true"></div>
         <button id="gear-toggle" class="gear-head" aria-expanded="true" aria-controls="gear-body">
           <svg class="gear-icon"><use href="#i-scope"/></svg>
           <span class="gear-title"><strong id="gear-name"></strong><span id="gear-spec" class="gear-spec"></span></span>
           <span id="gear-mag" class="gear-mag"></span>
           <svg class="gear-chevron"><use href="#i-chevron"/></svg>
         </button>
+        <div id="gear-quick" class="gear-quick"></div>
         <div id="gear-body" class="gear-body">
           <label class="gear-label" for="gear-model" data-i18n="gear.telescope">Telescope</label>
           <select id="gear-model"></select>
@@ -96,6 +104,7 @@
       </section>
 
       <aside id="panel" class="panel">
+        <div class="sheet-grip" id="panel-grip" aria-hidden="true"></div>
         <div class="panel-head">
           <span data-i18n="top.settings">Settings</span>
           <button id="panel-close" class="close" aria-label="Close" data-i18n-aria="info.close">×</button>
@@ -140,12 +149,47 @@
           <p class="hint" data-i18n="set.gearHint">Pick the telescope, eyepiece and Barlow in the equipment panel of the telescope view.</p>
         </details>
 
+        <button id="guide-open" class="wide with-icon guide-open"><svg><use href="#i-help"/></svg><span data-i18n="top.guide">Quick guide</span></button>
         <label class="lang-row"><span data-i18n="set.language">Language</span> <select id="language"></select></label>
         <p class="hint" data-i18n="set.help"></p>
         <p class="hint credits" data-i18n="set.credits"></p>
       </aside>
 
+      <div id="gyro-ui" class="gyro-ui" hidden>
+        <button id="gyro-btn" class="gyro-btn" aria-pressed="false" data-i18n-aria="gyro.start" data-i18n-title="gyro.start" aria-label="Point your phone at the sky"><svg><use href="#i-phone"/></svg></button>
+        <button id="gyro-pill" class="gyro-pill" hidden data-i18n="gyro.active">Following your phone · tap to stop</button>
+      </div>
+
+      <section id="timesheet" class="timesheet" hidden aria-labelledby="ts-title">
+        <div class="sheet-grip" id="ts-grip" aria-hidden="true"></div>
+        <div class="ts-head">
+          <div>
+            <p id="ts-title" class="ts-time"></p>
+            <p id="ts-date" class="ts-date"></p>
+          </div>
+          <button id="ts-play" class="ts-play" data-i18n-aria="time.play" aria-label="Play or pause"><svg><use id="ts-play-icon" href="#i-pause"/></svg></button>
+        </div>
+        <div id="ts-jog" class="ts-jog" role="slider" tabindex="0" aria-valuemin="-24" aria-valuemax="24" aria-valuenow="0" data-i18n-aria="time.drag" aria-label="Drag to travel in time">
+          <div class="ts-ticks"></div>
+          <span class="ts-jog-label" data-i18n="time.drag">Drag to travel in time</span>
+        </div>
+        <div id="ts-speeds" class="ts-speeds"></div>
+        <div class="ts-actions">
+          <button id="ts-now" data-i18n="time.now">Now</button>
+          <button id="ts-tonight" class="with-icon"><svg><use href="#i-moonset"/></svg><span data-i18n="day.tonight">See tonight's sky</span></button>
+        </div>
+      </section>
+
+      <nav id="tabbar" class="tabbar" aria-label="Main">
+        <button id="tab-sky" class="tab active" aria-pressed="true"><svg><use href="#i-sky"/></svg><span data-i18n="tab.sky">Sky</span></button>
+        <button id="tab-search" class="tab" aria-pressed="false"><svg><use href="#i-search"/></svg><span data-i18n="tab.search">Search</span></button>
+        <button id="tab-scope" class="tab tab-main" aria-pressed="false"><svg><use href="#i-scope"/></svg><span data-i18n="tab.scope">Telescope</span></button>
+        <button id="tab-time" class="tab" aria-pressed="false"><svg><use href="#i-clock"/></svg><span data-i18n="tab.time">Time</span></button>
+        <button id="tab-more" class="tab" aria-pressed="false"><svg><use href="#i-sliders"/></svg><span data-i18n="tab.more">Settings</span></button>
+      </nav>
+
       <div id="info" class="info" hidden>
+        <div class="sheet-grip" id="info-grip" aria-hidden="true"></div>
         <button id="info-close" class="close" title="Close" aria-label="Close" data-i18n-title="info.close" data-i18n-aria="info.close">×</button>
         <h2 id="info-title"></h2>
         <p id="info-sub" class="sub"></p>
@@ -154,6 +198,7 @@
           <button id="info-center" data-i18n="info.center">Center</button>
           <button id="info-scope" class="with-icon"><svg><use href="#i-scope"/></svg><span data-i18n="info.observe">Observe</span></button>
           <label class="check"><input id="info-track" type="checkbox" /> <span data-i18n="info.track">Track</span></label>
+          <button id="info-more" class="info-more" aria-expanded="false" data-i18n="info.more">Details</button>
         </div>
       </div>
 

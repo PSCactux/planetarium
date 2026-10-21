@@ -2,6 +2,7 @@
 // screen. Some steps are done by doing the thing itself (dragging the sky, pressing the
 // telescope button); "Next" does it for you.
 import { LANGS, type Lang, type MsgKey, lang, langName, onLangChange, setLang, t } from '../i18n';
+import { gyroAvailable } from './gyro';
 
 const SEEN_KEY = 'planetarium.guide';
 
@@ -10,11 +11,16 @@ interface Hooks {
   setTelescope: (on: boolean) => void;
   isTelescope: () => boolean;
   closePanels: () => void;
+  /** True on phones, where the controls live in the tab bar. */
+  phone: () => boolean;
 }
 
 interface Step {
-  /** Element to light up; none for the welcome card. */
+  /** Element to light up (desktop and phone selectors); none for the welcome card. */
   target?: string;
+  phoneTarget?: string;
+  /** Only on phones with motion sensors. */
+  phoneOnly?: boolean;
   title: MsgKey;
   text: MsgKey;
   /** Runs when the step opens (e.g. to make sure its element is on screen). */
@@ -29,7 +35,8 @@ export class Guide {
   private root = document.getElementById('guide') as HTMLElement;
   private spot = this.root.querySelector('.guide-spot') as HTMLElement;
   private card = this.root.querySelector('.guide-card') as HTMLElement;
-  private steps: Step[];
+  private allSteps: Step[];
+  private steps: Step[] = [];
   private index = 0;
   private cleanup: (() => void) | null = null;
   private raf = 0;
@@ -39,16 +46,17 @@ export class Guide {
   }
 
   constructor(private hooks: Hooks) {
-    this.steps = [
+    this.allSteps = [
       { title: 'guide.welcomeTitle', text: 'guide.welcome' },
       { target: '#gl', title: 'guide.skyTitle', text: 'guide.sky', doneOn: { selector: '#gl', event: 'pointerup' } },
-      { target: '#search-toggle', title: 'guide.searchTitle', text: 'guide.search' },
-      { target: '.timebar', title: 'guide.timeTitle', text: 'guide.time', enter: () => this.hooks.setTelescope(false) },
-      { target: '#panel-toggle', title: 'guide.settingsTitle', text: 'guide.settings' },
+      { target: '#gyro-btn', phoneTarget: '#gyro-btn', phoneOnly: true, title: 'guide.gyroTitle', text: 'guide.gyro' },
+      { target: '#search-toggle', phoneTarget: '#tab-search', title: 'guide.searchTitle', text: 'guide.search' },
+      { target: '.timebar', phoneTarget: '#tab-time', title: 'guide.timeTitle', text: 'guide.time', enter: () => this.hooks.setTelescope(false) },
+      { target: '#panel-toggle', phoneTarget: '#tab-more', title: 'guide.settingsTitle', text: 'guide.settings' },
       {
-        target: '#scope-toggle', title: 'guide.scopeTitle', text: 'guide.scope',
+        target: '#scope-toggle', phoneTarget: '#tab-scope', title: 'guide.scopeTitle', text: 'guide.scope',
         enter: () => this.hooks.setTelescope(false),
-        doneOn: { selector: '#scope-toggle', event: 'click' },
+        doneOn: { selector: '#scope-toggle, #tab-scope', event: 'click' },
         next: () => this.hooks.setTelescope(true),
       },
       { target: '#gear', title: 'guide.gearTitle', text: 'guide.gear', enter: () => this.hooks.setTelescope(true) },
@@ -75,6 +83,8 @@ export class Guide {
   }
 
   start(): void {
+    const phone = this.hooks.phone();
+    this.steps = this.allSteps.filter((s) => !s.phoneOnly || (phone && gyroAvailable()));
     this.hooks.closePanels();
     this.root.hidden = false;
     this.go(0);
@@ -100,13 +110,13 @@ export class Guide {
     const step = this.steps[i];
     step.enter?.();
     if (step.doneOn) {
-      const el = document.querySelector(step.doneOn.selector);
+      const els = [...document.querySelectorAll(step.doneOn.selector)];
       const handler = () => {
         // Let the click do its job first, then move on.
         setTimeout(() => { if (this.index === i) this.advance(); }, step.doneOn!.selector === '#gl' ? 700 : 350);
       };
-      el?.addEventListener(step.doneOn.event, handler, { once: true });
-      this.cleanup = () => el?.removeEventListener(step.doneOn!.event, handler);
+      for (const el of els) el.addEventListener(step.doneOn.event, handler, { once: true });
+      this.cleanup = () => { for (const el of els) el.removeEventListener(step.doneOn!.event, handler); };
     }
     this.render();
   }
@@ -151,8 +161,11 @@ export class Guide {
   private place(): void {
     if (this.root.hidden) return;
     const step = this.steps[this.index];
-    const el = step.target ? document.querySelector<HTMLElement>(step.target) : null;
-    const box = el && el.offsetParent !== null ? el.getBoundingClientRect() : null;
+    const selector = this.hooks.phone() && step.phoneTarget ? step.phoneTarget : step.target;
+    const el = selector ? document.querySelector<HTMLElement>(selector) : null;
+    // Fixed-position elements have no offsetParent; a zero-sized box means hidden.
+    const rect = el?.getBoundingClientRect();
+    const box = rect && rect.width > 0 && rect.height > 0 ? rect : null;
     const W = window.innerWidth, H = window.innerHeight;
     if (!box || step.target === '#gl') {
       // Whole sky (or nothing): a soft, open spotlight.

@@ -66,17 +66,39 @@ export function search(entries: Entry[], query: string, limit = 8): Entry[] {
   return scored.sort((a, b) => a[0] - b[0]).slice(0, limit).map(([, e]) => e);
 }
 
-/** Wires the search box; `go` is called with the chosen target. */
-export function setupSearch(sky: Sky, entries: Entry[], go: (t: Target) => void): void {
+/** Something worth looking at right now, shown while the search box is empty. */
+export interface Highlight {
+  target: Target;
+  label: string;
+  sub: string;
+}
+
+/**
+ * Wires the search box; `go` is called with the chosen target. With an empty box it lists
+ * `highlights()`. Returns open/close for other controls (the tab bar on phones).
+ */
+export function setupSearch(sky: Sky, entries: Entry[], go: (t: Target) => void, highlights: () => Highlight[] = () => []): { open: () => void; close: () => void } {
   const box = document.getElementById('search') as HTMLElement;
   const input = document.getElementById('search-input') as HTMLInputElement;
   const list = document.getElementById('search-results') as HTMLUListElement;
   const toggle = document.getElementById('search-toggle') as HTMLButtonElement;
-  let results: Entry[] = [];
+  let results: { target: Target; label: string; sub: string; below: boolean }[] = [];
   let active = 0;
+  const fromEntries = (list: Entry[]) => list.map((e) => {
+    const alt = sky.frame ? horizonVecToAltAz(sky.targetVec(e.target)).alt : 0;
+    return { target: e.target, label: e.label(), sub: alt < 0 ? `${e.sub()} · ${t('search.below')}` : e.sub(), below: alt < 0 };
+  });
+  const refresh = () => {
+    const q = input.value.trim();
+    results = q ? fromEntries(search(entries, q)) : highlights().map((h) => ({ ...h, below: false }));
+    box.classList.toggle('empty-query', !q);
+    active = 0;
+    render();
+  };
 
   const close = () => {
     box.classList.remove('open');
+    document.body.classList.remove('search-open');
     toggle.setAttribute('aria-expanded', 'false');
     input.value = '';
     list.replaceChildren();
@@ -84,31 +106,40 @@ export function setupSearch(sky: Sky, entries: Entry[], go: (t: Target) => void)
   };
   const open = () => {
     box.classList.add('open');
+    document.body.classList.add('search-open');
     toggle.setAttribute('aria-expanded', 'true');
+    refresh();
     input.focus();
   };
-  const choose = (e: Entry | undefined) => {
+  const choose = (e: { target: Target } | undefined) => {
     if (!e) return;
     go(e.target);
     close();
   };
   const render = () => {
-    list.replaceChildren(...results.map((e, i) => {
+    const items = results.map((e, i) => {
       const li = document.createElement('li');
       li.setAttribute('role', 'option');
       li.setAttribute('aria-selected', String(i === active));
-      const alt = sky.frame ? horizonVecToAltAz(sky.targetVec(e.target)).alt : 0;
       li.innerHTML = '<span class="s-label"></span><span class="s-sub"></span>';
-      li.querySelector('.s-label')!.textContent = e.label();
-      li.querySelector('.s-sub')!.textContent = alt < 0 ? `${e.sub()} · ${t('search.below')}` : e.sub();
-      if (alt < 0) li.classList.add('below');
-      li.addEventListener('pointerdown', (ev) => { ev.preventDefault(); choose(e); });
+      li.querySelector('.s-label')!.textContent = e.label;
+      li.querySelector('.s-sub')!.textContent = e.sub;
+      if (e.below) li.classList.add('below');
+      li.addEventListener('click', () => choose(e));
       return li;
-    }));
+    });
+    if (!input.value.trim() && items.length) {
+      const head = document.createElement('li');
+      head.className = 's-head';
+      head.setAttribute('role', 'presentation');
+      head.textContent = t('search.visible');
+      items.unshift(head);
+    }
+    list.replaceChildren(...items);
   };
 
   toggle.addEventListener('click', () => (box.classList.contains('open') ? close() : open()));
-  input.addEventListener('input', () => { results = search(entries, input.value); active = 0; render(); });
+  input.addEventListener('input', refresh);
   input.addEventListener('keydown', (ev) => {
     if (ev.key === 'ArrowDown') { active = Math.min(results.length - 1, active + 1); render(); ev.preventDefault(); }
     else if (ev.key === 'ArrowUp') { active = Math.max(0, active - 1); render(); ev.preventDefault(); }
@@ -118,4 +149,8 @@ export function setupSearch(sky: Sky, entries: Entry[], go: (t: Target) => void)
   window.addEventListener('keydown', (ev) => {
     if (ev.key === '/' && !(ev.target as HTMLElement).closest('input, select, textarea')) { open(); ev.preventDefault(); }
   });
+  // Close by tapping outside the box (phones show it as a full-screen sheet with its own backdrop).
+  document.getElementById('search-backdrop')?.addEventListener('click', close);
+  document.getElementById('search-cancel')?.addEventListener('click', close);
+  return { open, close };
 }
