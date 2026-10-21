@@ -59,7 +59,7 @@ describe('search', () => {
     { id: 'NGC 5139', name: 'Omega Centauri', catalogue: 'NGC 5139', kind: 'globular', ra: 201.7, dec: -47.5, mag: 3.9, major: 36, minor: 36, pa: 0 },
   ];
   const index = buildSearchIndex(stars, dso);
-  const first = (q: string) => search(index, q)[0]?.label;
+  const first = (q: string) => search(index, q)[0]?.label();
 
   it('finds planets, stars and deep-sky objects by name or number', () => {
     expect(first('jupi')).toBe('Jupiter');
@@ -72,6 +72,13 @@ describe('search', () => {
   it('ignores accents and case, and finds Bayer designations', () => {
     expect(first('ANDRÓMEDA')).toBe('M31 · Andromeda Galaxy');
     expect(first('α lyr')).toBe('Vega');
+  });
+
+  it('finds objects by their Spanish or Catalan names too', () => {
+    expect(first('luna')).toBe('Moon');
+    expect(first('saturno')).toBe('Saturn');
+    expect(first('galaxia de andromeda')).toBe('M31 · Andromeda Galaxy');
+    expect(first("galàxia d'andròmeda")).toBe('M31 · Andromeda Galaxy');
   });
 
   it('returns nothing for an empty query', () => {

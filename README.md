@@ -30,11 +30,14 @@ Built with Vite, TypeScript and three.js. No backend, no tracking, no API keys.
 - Location: geolocation (rounded to about 1 km and never stored), manual latitude and longitude, and a few presets (Greenwich Observatory is the default).
 - Click any star or planet to see its name, magnitude, RA/Dec (J2000 and of date), altitude and azimuth. You can centre it or track it.
 - **Telescope view.** Choose among real models (binoculars, achromatic and apochromatic refractors, Dobsonians, Maksutovs and Schmidt-Cassegrains) or set your own aperture, focal length and design with sliders, then an eyepiece (4 to 32 mm) and a ×2 or ×3 Barlow. Every change updates the eyepiece view at once, with live gauges for magnification (and its useful range), true field, exit pupil, faintest stars and resolution, plus a line on what the combination is good for. The view also reproduces the optics: diffraction spikes on a Newtonian, the violet halo of a short achromat, dimmer nebulae at high power, softer images past the useful magnification, and optionally the rotated (Newtonian) or mirrored (star diagonal) image. A warning appears if the Sun is near the field.
+- **English, Spanish and Catalan.** The language follows the browser and can be changed in the settings or with `?lang=es`; numbers, dates and compass points follow it too, and searches work with the names of any of the three languages.
+- **Quick guide.** On the first visit a seven-step tour lights up each part of the screen (drag the sky, search, time, settings, telescope, equipment, targets); some steps are completed by doing the thing itself. The `?` button replays it.
+- **Starts near you.** Without asking for your location, the first view uses a city in your browser's time zone; the settings have presets, coordinates and geolocation.
 - **Search.** Type a name or number (Jupiter, Vega, M31, NGC 5139, Omega…) or press `/`. Results say when something is below the horizon.
 - **Telescope targets.** Switching to the telescope view always aims at something: the selected object if it is up, otherwise Vega at night or the brightest visible object in daylight, and the view then tracks it. A selector in the bottom bar (or the `[` and `]` keys) steps through the targets that are currently above the horizon, away from the Sun and bright enough to see: the Moon, the planets, about 25 classic eyepiece stars such as Albireo and Mizar, and the best-known deep-sky objects (at night). Clicking an object inside the eyepiece re-aims the telescope at it.
 - Shareable views through the query string, for example
   `?t=2026-10-04T02:30:00Z&target=m42&scope=1&model=skyliner-200p&eye=25`
-  (`t`, `lat`, `lon`, `az`, `alt`, `fov`, `scope`, `model`, `eye`, `barlow`, `sky`, `target`, `paused`, `panel`, `milkyway`, `deepsky`).
+  (`t`, `lat`, `lon`, `az`, `alt`, `fov`, `scope`, `model`, `eye`, `barlow`, `sky`, `target`, `paused`, `panel`, `milkyway`, `deepsky`, `lang`). The guide does not open on shared views (`t`, `target`, `scope`) or with `guide=0`.
 - The chosen equipment and sky darkness are remembered in the browser.
 
 ## Run it
@@ -107,9 +110,11 @@ The code is MIT licensed (see `LICENSE`).
 src/
   astro/        time, coordinates, precession, Sun/Moon/planets, planet orientation, Jupiter's moons, optics (pure TS, unit tested)
   sky/          three.js scene, star and sky shaders, Milky Way, deep-sky objects, textured bodies, 2D labels and eyepiece overlay
-  ui/           formatting helpers, equipment panel, search
+  ui/           formatting helpers, equipment panel, search, quick guide
   data.ts       loads public/data/*.json
   equipment.ts  telescope, eyepiece and Barlow catalogue
+  i18n.ts       interface texts in English, Spanish and Catalan
+  names.ts      names of sky objects in the current language
   state.ts      app state, presets, query-string options
   targets.ts    telescope tour: showpiece targets, visibility and default choice
   main.ts       wiring: input, controls, info card, render loop

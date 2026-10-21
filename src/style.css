@@ -103,7 +103,7 @@ svg { width: 18px; height: 18px; flex: none; }
 .stats { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
 .stats td { padding: 2px 0; }
 .stats td:first-child { color: var(--muted); }
-.stats td:last-child { text-align: right; }
+.stats td:last-child { text-align: right; white-space: nowrap; padding-left: 10px; }
 
 /* Equipment panel */
 .gear { position: absolute; z-index: 2; left: calc(16px + env(safe-area-inset-left)); top: calc(96px + env(safe-area-inset-top));
@@ -157,7 +157,8 @@ body.scope-mode .info { left: auto; right: calc(16px + env(safe-area-inset-right
 .actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
 .actions label { display: flex; gap: 6px; align-items: center; margin-left: auto; }
 .actions [hidden] { display: none; }
-.loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
+.loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; color: var(--muted); font-size: 13px; letter-spacing: 0.02em; }
 
 @media (max-width: 1100px) {
   .gear { width: 300px; }
@@ -165,7 +166,7 @@ body.scope-mode .info { left: auto; right: calc(16px + env(safe-area-inset-right
 
 @media (max-width: 640px) {
   /* Header: date, time and place only; UTC and sidereal time stay on larger screens. */
-  .hud { left: calc(12px + env(safe-area-inset-left)); right: 110px; }
+  .hud { left: calc(12px + env(safe-area-inset-left)); right: 164px; }
   .brand { font-size: 11px; }
   .clock { font-size: 12px; }
   .clock-note, .clock-utc { display: none !important; }
@@ -216,4 +217,46 @@ body.scope-mode .info { left: auto; right: calc(16px + env(safe-area-inset-right
   body.scope-mode .info .stats { display: none; }
   /* While the equipment sheet is open it has the screen to itself. */
   body.scope-mode.gear-open .info { display: none; }
+}
+
+/* Language row in the settings */
+.lang-row { margin-top: 12px !important; }
+
+/* Loading screen */
+.loading-ring { width: 34px; height: 34px; border-radius: 50%; border: 2px solid rgba(255, 200, 97, 0.15);
+  border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Quick guide */
+.guide { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
+.guide[hidden] { display: none; }
+.guide-spot { position: fixed; border-radius: 14px; box-shadow: 0 0 0 9999px rgba(3, 5, 10, 0.62), 0 0 0 2px var(--accent),
+  0 0 24px 4px rgba(255, 200, 97, 0.35); }
+.guide-spot.none { inset: 0; border-radius: 0; box-shadow: inset 0 0 0 9999px rgba(3, 5, 10, 0.62); }
+.guide-spot.sky { inset: 0; border-radius: 0; box-shadow: inset 0 0 160px 60px rgba(3, 5, 10, 0.75); }
+.guide-card { position: fixed; left: 0; top: 0; width: 340px; max-width: calc(100vw - 24px); pointer-events: auto;
+  background: var(--panel-solid); border: 1px solid var(--border-strong); border-radius: 16px; padding: 18px 18px 14px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55); transition: transform 0.3s ease; }
+.guide-card.centered { width: 380px; }
+.guide-step { margin: 0 0 4px; color: var(--accent); font-size: 11px; font-weight: 650; letter-spacing: 0.1em; text-transform: uppercase; }
+.guide-step:empty { display: none; }
+.guide-card h2 { margin: 0 0 6px; font-size: 18px; font-weight: 650; letter-spacing: -0.01em; }
+.guide-text { margin: 0; color: #c3ccdb; font-size: 14px; line-height: 1.55; }
+.guide-langs { display: flex; gap: 6px; margin-top: 14px; }
+.guide-langs[hidden] { display: none; }
+.guide-langs button { flex: 1; padding: 7px 0; font-size: 13px; }
+.guide-langs button[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); color: #ffe2a6; }
+.guide-actions { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+.guide-actions [hidden] { display: none; }
+.guide-skip { background: transparent; border-color: transparent; color: var(--muted); padding-left: 0; }
+.guide-skip:hover { background: transparent; border-color: transparent; color: var(--text); }
+.guide-card { overflow: hidden; }
+.guide-dots { position: absolute; left: 0; top: 0; height: 3px; width: calc(var(--p, 0) * 100%); background: var(--accent);
+  transition: width 0.3s ease; }
+.guide-skip { margin-right: auto; }
+.guide-next { background: var(--accent); border-color: var(--accent); color: #1d1407; font-weight: 650; padding: 8px 16px; }
+.guide-next:hover { background: #ffd789; border-color: #ffd789; }
+@media (prefers-reduced-motion: reduce) { .guide-card { transition: none; } .loading-ring { animation: none; } }
+@media (max-width: 640px) {
+  .guide-card, .guide-card.centered { width: calc(100vw - 24px); }
 }

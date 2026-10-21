@@ -17,15 +17,6 @@ export interface TelescopeModel {
   note: string;
 }
 
-export const DESIGN_NAMES: Record<Design, string> = {
-  achromat: 'Achromatic refractor',
-  apochromat: 'Apochromatic refractor',
-  newtonian: 'Newtonian reflector',
-  maksutov: 'Maksutov-Cassegrain',
-  sct: 'Schmidt-Cassegrain',
-  binocular: 'Binoculars',
-};
-
 /** Typical specifications of well-known models, as published by their makers. */
 export const TELESCOPES: TelescopeModel[] = [
   { id: 'binoculars-10x50', name: '10×50 binoculars', design: 'binocular', aperture: 50, focalLength: 250, obstruction: 0,
@@ -66,17 +57,18 @@ export interface Eyepiece {
   id: string;
   focalLength: number; // mm
   apparentFov: number; // degrees
-  name: string;
+  /** Optical type, for the name shown to the user. */
+  type: 'plossl' | 'wide' | 'plain';
 }
 
 export const EYEPIECES: Eyepiece[] = [
-  { id: '32', focalLength: 32, apparentFov: 50, name: '32 mm Plössl' },
-  { id: '25', focalLength: 25, apparentFov: 52, name: '25 mm Plössl' },
-  { id: '20', focalLength: 20, apparentFov: 68, name: '20 mm wide-angle' },
-  { id: '15', focalLength: 15, apparentFov: 52, name: '15 mm Plössl' },
-  { id: '10', focalLength: 10, apparentFov: 52, name: '10 mm Plössl' },
-  { id: '6', focalLength: 6, apparentFov: 60, name: '6 mm' },
-  { id: '4', focalLength: 4, apparentFov: 58, name: '4 mm' },
+  { id: '32', focalLength: 32, apparentFov: 50, type: 'plossl' },
+  { id: '25', focalLength: 25, apparentFov: 52, type: 'plossl' },
+  { id: '20', focalLength: 20, apparentFov: 68, type: 'wide' },
+  { id: '15', focalLength: 15, apparentFov: 52, type: 'plossl' },
+  { id: '10', focalLength: 10, apparentFov: 52, type: 'plossl' },
+  { id: '6', focalLength: 6, apparentFov: 60, type: 'plain' },
+  { id: '4', focalLength: 4, apparentFov: 58, type: 'plain' },
 ];
 
 export const BARLOWS = [1, 2, 3] as const;

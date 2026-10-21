@@ -3,32 +3,35 @@ import type { Dso, Star } from '../data';
 import { PLANETS } from '../astro/solarsystem';
 import { horizonVecToAltAz } from '../astro/coords';
 import type { Sky, Target } from '../sky/sky';
-
-const KIND_NAMES: Record<Dso['kind'], string> = {
-  galaxy: 'Galaxy', globular: 'Globular cluster', open: 'Open cluster', nebula: 'Nebula',
-  planetary: 'Planetary nebula', double: 'Double star',
-};
+import { allTranslations, dsoNamesAll, num, t, type MsgKey } from '../i18n';
+import { bodyName, dsoLabel } from '../names';
 
 interface Entry {
-  label: string;
-  sub: string;
+  /** Labels are built when shown, so they follow the language. */
+  label: () => string;
+  sub: () => string;
   keys: string[];
   target: Target;
   mag: number;
 }
 
-const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 export function buildSearchIndex(stars: Star[], dso: Dso[]): Entry[] {
+  // Every language's name is searchable, whatever language the interface is in.
+  const names = (key: MsgKey) => allTranslations(key).map(fold);
   const entries: Entry[] = [
-    { label: 'Moon', sub: 'Our satellite', keys: ['moon', 'luna'], target: { kind: 'moon' }, mag: -12 },
-    ...PLANETS.map((p) => ({ label: p.name, sub: 'Planet', keys: [fold(p.name)], target: { kind: 'planet', id: p.id } as Target, mag: -2 })),
+    { label: () => bodyName('moon'), sub: () => t('search.moon'), keys: names('body.moon'), target: { kind: 'moon' }, mag: -12 },
+    ...PLANETS.map((p) => ({
+      label: () => bodyName(p.id), sub: () => t('info.planet'), keys: names(`body.${p.id}` as MsgKey),
+      target: { kind: 'planet', id: p.id } as Target, mag: -2,
+    })),
   ];
   stars.forEach((s, index) => {
     if (!s.name && s.mag > 3.5) return;
     entries.push({
-      label: s.name || s.designation,
-      sub: `Star${s.name && s.designation ? ` · ${s.designation}` : ''} · mag ${s.mag.toFixed(1)}`,
+      label: () => s.name || s.designation,
+      sub: () => `${t('info.star')}${s.name && s.designation ? ` · ${s.designation}` : ''} · mag ${num(s.mag, 1)}`,
       keys: [s.name, s.designation].filter(Boolean).map(fold),
       target: { kind: 'star', index },
       mag: s.mag,
@@ -36,9 +39,9 @@ export function buildSearchIndex(stars: Star[], dso: Dso[]): Entry[] {
   });
   dso.forEach((o, index) => {
     entries.push({
-      label: o.name ? `${o.id} · ${o.name}` : o.id,
-      sub: `${KIND_NAMES[o.kind]} · mag ${o.mag.toFixed(1)}${o.catalogue !== o.id ? ` · ${o.catalogue}` : ''}`,
-      keys: [o.id, o.id.replace(' ', ''), o.name, o.catalogue, o.catalogue.replace(' ', '')].filter(Boolean).map(fold),
+      label: () => dsoLabel(o),
+      sub: () => `${t(`kind.${o.kind}` as MsgKey)} · mag ${num(o.mag, 1)}${o.catalogue !== o.id ? ` · ${o.catalogue}` : ''}`,
+      keys: [o.id, o.id.replace(' ', ''), o.name, ...dsoNamesAll(o.id), o.catalogue, o.catalogue.replace(' ', '')].filter(Boolean).map(fold),
       target: { kind: 'dso', index },
       mag: o.mag,
     });
@@ -96,8 +99,8 @@ export function setupSearch(sky: Sky, entries: Entry[], go: (t: Target) => void)
       li.setAttribute('aria-selected', String(i === active));
       const alt = sky.frame ? horizonVecToAltAz(sky.targetVec(e.target)).alt : 0;
       li.innerHTML = '<span class="s-label"></span><span class="s-sub"></span>';
-      li.querySelector('.s-label')!.textContent = e.label;
-      li.querySelector('.s-sub')!.textContent = alt < 0 ? `${e.sub} · below the horizon` : e.sub;
+      li.querySelector('.s-label')!.textContent = e.label();
+      li.querySelector('.s-sub')!.textContent = alt < 0 ? `${e.sub()} · ${t('search.below')}` : e.sub();
       if (alt < 0) li.classList.add('below');
       li.addEventListener('pointerdown', (ev) => { ev.preventDefault(); choose(e); });
       return li;

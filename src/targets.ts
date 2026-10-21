@@ -41,7 +41,7 @@ export function buildTour(stars: Star[], dso: Dso[] = []): TourStop[] {
   }
   for (const id of DSO_ORDER) {
     const index = dso.findIndex((o) => o.id === id);
-    if (index >= 0) tour.push({ key: `dso:${index}`, name: dsoLabel(dso[index]), target: { kind: 'dso', index } });
+    if (index >= 0) tour.push({ key: `dso:${index}`, name: dso[index].id, target: { kind: 'dso', index } });
   }
   for (const name of STAR_ORDER) {
     const index = stars.findIndex((s) => s.name === name);
@@ -54,10 +54,6 @@ export function targetKey(t: Target): string {
   return t.kind === 'star' ? `star:${t.index}` : t.kind === 'dso' ? `dso:${t.index}` : t.kind === 'planet' ? t.id : t.kind;
 }
 
-/** "M31 Andromeda Galaxy", "NGC 5139 Omega Centauri", "M3". */
-export function dsoLabel(o: Dso): string {
-  return o.name && o.name !== o.id ? `${o.id} ${o.name}` : o.id;
-}
 
 /** Tour stops that are above the horizon, away from the Sun and bright enough to see right now. */
 export function visibleStops(tour: TourStop[], sky: Sky, stars: Star[]): TourStop[] {

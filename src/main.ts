@@ -6,11 +6,14 @@ import { Overlay } from './sky/overlay';
 import { PLACES, SKY_QUALITY, SPEEDS, type AppState, applyQuery, defaultState, syncTelescope } from './state';
 import { horizonVecToAltAz, j2000ToHorizonMatrix, precessRaDec } from './astro/coords';
 import { vecToSpherical, norm360, mulMatVec } from './astro/math';
-import { PLANETS, moonPhaseName, sunPosition } from './astro/solarsystem';
+import { PLANETS, moonPhase, sunPosition } from './astro/solarsystem';
 import { julianDate, lstDeg, ttFromUt } from './astro/time';
 import { telescopeStats } from './astro/optics';
-import { compass, formatDMS, formatDeg, formatRA, toLocalInput } from './ui/format';
-import { buildTour, defaultStop, dsoLabel, stopMagnitude, targetKey, visibleStops, type TourStop } from './targets';
+import { compass, formatDMS, formatRA, toLocalInput } from './ui/format';
+import { buildTour, defaultStop, stopMagnitude, targetKey, visibleStops, type TourStop } from './targets';
+import { bodyName, dsoLabel, starLabel, targetLabel as nameOf } from './names';
+import { LANGS, type Lang, type MsgKey, applyStatic, lang, langName, locale, localCompass, num, onLangChange, setLang, t, tx } from './i18n';
+import { Guide } from './ui/guide';
 import { BARLOWS, findTelescope, EYEPIECES, type Equipment } from './equipment';
 import { GearPanel } from './ui/gear';
 import { buildSearchIndex, setupSearch } from './ui/search';
@@ -61,6 +64,8 @@ function save(state: AppState): void {
     // Private mode or blocked storage: nothing to do.
   }
 }
+
+applyStatic();
 
 async function main() {
   const state: AppState = defaultState();
@@ -201,12 +206,16 @@ async function main() {
   });
 
   const speedSelect = $<HTMLSelectElement>('speed');
-  SPEEDS.forEach((s, i) => speedSelect.add(new Option(s.label, String(i))));
+  SPEEDS.forEach((_, i) => speedSelect.add(new Option(speedLabel(i), String(i))));
   speedSelect.addEventListener('change', () => { state.speedIndex = Number(speedSelect.value); state.playing = true; syncControls(); });
   $('slower').addEventListener('click', () => { state.speedIndex = Math.max(0, state.speedIndex - 1); state.playing = true; syncControls(); });
   $('faster').addEventListener('click', () => { state.speedIndex = Math.min(SPEEDS.length - 1, state.speedIndex + 1); state.playing = true; syncControls(); });
   $('play').addEventListener('click', () => { state.playing = !state.playing; syncControls(); });
   $('now').addEventListener('click', () => { state.time = Date.now(); state.speedIndex = 4; state.playing = true; syncControls(); });
+
+  function speedLabel(i: number): string {
+    return t(`speed.${i}` as MsgKey);
+  }
 
   const dt = $<HTMLInputElement>('datetime');
   dt.addEventListener('change', () => {
@@ -215,12 +224,23 @@ async function main() {
   });
 
   const placeSelect = $<HTMLSelectElement>('place');
-  PLACES.forEach((p, i) => placeSelect.add(new Option(p.name, String(i))));
-  placeSelect.add(new Option('Custom', 'custom'));
+  /** Name of the current place in the current language. */
+  function placeLabel(): string {
+    if (state.placeId === 'approx') return t('place.approx', { city: state.placeCity });
+    return tx(`place.${state.placeId}`, t('place.custom'));
+  }
+  function fillPlaces() {
+    const options = PLACES.map((p) => new Option(t(`place.${p.id}` as MsgKey), p.id));
+    if (state.placeId === 'approx') options.unshift(new Option(placeLabel(), 'approx'));
+    if (state.placeId === 'mine') options.unshift(new Option(t('place.mine'), 'mine'));
+    options.push(new Option(t('place.custom'), 'custom'));
+    placeSelect.replaceChildren(...options);
+    placeSelect.value = state.placeId;
+  }
   placeSelect.addEventListener('change', () => {
-    const p = PLACES[Number(placeSelect.value)];
+    const p = PLACES.find((x) => x.id === placeSelect.value);
     if (!p) return;
-    Object.assign(state, { lat: p.lat, lon: p.lon, placeName: p.name });
+    Object.assign(state, { lat: p.lat, lon: p.lon, placeId: p.id });
     syncControls();
   });
   const latInput = $<HTMLInputElement>('lat'), lonInput = $<HTMLInputElement>('lon');
@@ -228,30 +248,30 @@ async function main() {
     input.addEventListener('change', () => {
       const lat = Number(latInput.value), lon = Number(lonInput.value);
       if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
-        Object.assign(state, { lat, lon, placeName: 'Custom' });
+        Object.assign(state, { lat, lon, placeId: 'custom' });
       }
       syncControls();
     });
   $('geolocate').addEventListener('click', () => {
     const status = $('geo-status');
-    if (!navigator.geolocation) { status.textContent = 'Geolocation is not available.'; return; }
-    status.textContent = 'Locating…';
+    if (!navigator.geolocation) { status.textContent = t('set.noGeo'); return; }
+    status.textContent = t('set.locating');
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         // Rounded to ~1 km: plenty for the sky, and nothing more precise is kept.
         state.lat = Math.round(pos.coords.latitude * 100) / 100;
         state.lon = Math.round(pos.coords.longitude * 100) / 100;
-        state.placeName = 'My location';
+        state.placeId = 'mine';
         status.textContent = '';
         syncControls();
       },
-      (err) => { status.textContent = `Could not get your location (${err.message}).`; },
+      (err) => { status.textContent = t('set.geoError', { error: err.message }); },
       { timeout: 10000 },
     );
   });
 
   const skyQuality = $<HTMLSelectElement>('sky-quality');
-  SKY_QUALITY.forEach((q, i) => skyQuality.add(new Option(q.label, String(i))));
+  SKY_QUALITY.forEach((_, i) => skyQuality.add(new Option(t(`sky.${i}` as MsgKey), String(i))));
   skyQuality.addEventListener('change', () => { state.skyQuality = Number(skyQuality.value); save(state); });
 
   const checks: [string, keyof AppState][] = [
@@ -274,29 +294,21 @@ async function main() {
   const scopeSelect = $<HTMLSelectElement>('scope-target');
   let optionsSignature = '';
 
-  function targetLabel(t: Target): string {
-    if (t.kind === 'star') {
-      const s = stars[t.index];
-      return s.name || s.designation || `HR ${s.hr}`;
-    }
-    if (t.kind === 'dso') return dsoLabel(dso[t.index]);
-    if (t.kind === 'planet') return PLANETS.find((p) => p.id === t.id)!.name;
-    return t.kind === 'sun' ? 'Sun' : 'Moon';
-  }
+  const targetLabel = (target: Target) => nameOf(target, stars, dso);
 
   /** Recomputes which tour stops are up and refreshes the target selector. */
   function refreshStops(updateFrame = true) {
     if (updateFrame) sky.update(state, width, height);
     visible = visibleStops(tour, sky, stars);
     const current = selection ? targetKey(selection) : '';
-    const entries = visible.map((s) => ({ key: s.key, name: s.name }));
+    const entries = visible.map((s) => ({ key: s.key, name: targetLabel(s.target) }));
     // An object picked by clicking that is not in the tour still shows as the current target.
     if (selection && current && !entries.some((e) => e.key === current)) entries.unshift({ key: current, name: targetLabel(selection) });
-    const signature = entries.map((e) => e.key).join('|');
+    const signature = `${lang()}|${entries.map((e) => e.key).join('|')}`;
     if (signature !== optionsSignature) {
       optionsSignature = signature;
       scopeSelect.replaceChildren(...entries.map((e) => new Option(e.name, e.key)));
-      if (!entries.length) scopeSelect.add(new Option('Nothing bright is up', ''));
+      if (!entries.length) scopeSelect.add(new Option(t('scope.nothing'), ''));
     }
     scopeSelect.disabled = entries.length === 0;
     if (entries.some((e) => e.key === current)) scopeSelect.value = current;
@@ -353,12 +365,11 @@ async function main() {
 
   function syncControls() {
     speedSelect.value = String(state.speedIndex);
-    $('speed-label').textContent = state.playing ? SPEEDS[state.speedIndex].label : 'Paused';
+    $('speed-label').textContent = state.playing ? speedLabel(state.speedIndex) : t('time.paused');
     $('play-icon').setAttribute('href', state.playing ? '#i-pause' : '#i-play');
     latInput.value = state.lat.toFixed(4);
     lonInput.value = state.lon.toFixed(4);
-    const idx = PLACES.findIndex((p) => p.lat === state.lat && p.lon === state.lon);
-    placeSelect.value = idx >= 0 ? String(idx) : 'custom';
+    fillPlaces();
     skyQuality.value = String(state.skyQuality);
     for (const [id, key] of checks) $<HTMLInputElement>(id).checked = state[key] as boolean;
     $<HTMLInputElement>('scope').checked = state.telescopeMode;
@@ -390,8 +401,7 @@ async function main() {
     state.az = az;
   }
 
-  const KIND_NAMES = { galaxy: 'Galaxy', globular: 'Globular cluster', open: 'Open cluster', nebula: 'Nebula', planetary: 'Planetary nebula', double: 'Double star' };
-  const size = (arcmin: number) => (arcmin >= 60 ? `${(arcmin / 60).toFixed(1)}°` : `${arcmin.toFixed(arcmin < 10 ? 1 : 0)}′`);
+  const size = (arcmin: number) => (arcmin >= 60 ? `${num(arcmin / 60, 1)}°` : `${num(arcmin, arcmin < 10 ? 1 : 0)}′`);
 
   let lastInfo = 0;
   function updateInfo(force = false) {
@@ -408,45 +418,45 @@ async function main() {
     const extra: [string, string][] = [];
     if (selection.kind === 'star') {
       const s = stars[selection.index];
-      title = s.name || s.designation || `HR ${s.hr}`;
-      sub = ['Star', s.name ? s.designation : '', `HR ${s.hr}`].filter(Boolean).join(' · ');
+      title = starLabel(s);
+      sub = [t('info.star'), s.name ? s.designation : '', `HR ${s.hr}`].filter(Boolean).join(' · ');
       [raJ, decJ] = [s.ra, s.dec];
-      extra.push(['Magnitude', s.mag.toFixed(2)], ['Colour index B−V', s.bv.toFixed(2)]);
+      extra.push([t('info.magnitude'), num(s.mag, 2)], [t('info.colour'), num(s.bv, 2)]);
     } else if (selection.kind === 'dso') {
       const o = dso[selection.index];
-      title = o.name ? `${o.id} · ${o.name}` : o.id;
-      sub = [KIND_NAMES[o.kind], o.catalogue !== o.id ? o.catalogue : ''].filter(Boolean).join(' · ');
+      title = dsoLabel(o);
+      sub = [t(`kind.${o.kind}` as MsgKey), o.catalogue !== o.id ? o.catalogue : ''].filter(Boolean).join(' · ');
       [raJ, decJ] = [o.ra, o.dec];
-      extra.push(['Magnitude', o.mag.toFixed(1)], ['Size', o.minor && o.minor !== o.major ? `${size(o.major)} × ${size(o.minor)}` : size(o.major)]);
+      extra.push([t('info.magnitude'), num(o.mag, 1)], [t('info.size'), o.minor && o.minor !== o.major ? `${size(o.major)} × ${size(o.minor)}` : size(o.major)]);
     } else {
       const body = selection.kind === 'planet' ? f.planets.get(selection.id)! : selection.kind === 'sun' ? f.sun : f.moon;
       [raJ, decJ] = vecToSpherical(body.dirJ2000);
       if (selection.kind === 'planet') {
         const id = selection.id;
-        title = PLANETS.find((p) => p.id === id)!.name;
-        sub = 'Planet';
-        extra.push(['Magnitude', body.mag.toFixed(1)], ['Apparent size', `${(f.planetRadius.get(id)! * 7200).toFixed(1)}″`],
-          ['Distance', `${body.distanceAu.toFixed(3)} au`], ['Illuminated', `${(body.illuminated * 100).toFixed(0)} %`]);
+        title = bodyName(id);
+        sub = t('info.planet');
+        extra.push([t('info.magnitude'), num(body.mag, 1)], [t('info.apparent'), `${num(f.planetRadius.get(id)! * 7200, 1)}″`],
+          [t('info.distance'), `${num(body.distanceAu, 3)} au`], [t('info.lit'), `${num(body.illuminated * 100)} %`]);
       } else if (selection.kind === 'sun') {
-        title = 'Sun';
-        sub = 'Star · never look at it through a telescope without a proper solar filter';
-        extra.push(['Magnitude', body.mag.toFixed(1)], ['Distance', `${body.distanceAu.toFixed(4)} au`]);
+        title = bodyName('sun');
+        sub = t('info.sunNote');
+        extra.push([t('info.magnitude'), num(body.mag, 1)], [t('info.distance'), `${num(body.distanceAu, 4)} au`]);
       } else {
-        title = 'Moon';
+        title = bodyName('moon');
         const [raSun] = vecToSpherical(f.sun.dirJ2000);
         const waxing = norm360(raJ - raSun) < 180;
-        sub = moonPhaseName(body.illuminated, waxing);
-        extra.push(['Magnitude', body.mag.toFixed(1)], ['Illuminated', `${(body.illuminated * 100).toFixed(0)} %`],
-          ['Distance', `${Math.round(body.distanceAu * 149597870.7).toLocaleString('en')} km`]);
+        sub = t(`phase.${moonPhase(body.illuminated, waxing)}` as MsgKey);
+        extra.push([t('info.magnitude'), num(body.mag, 1)], [t('info.lit'), `${num(body.illuminated * 100)} %`],
+          [t('info.distance'), `${num(Math.round(body.distanceAu * 149597870.7))} km`]);
       }
     }
     const [raD, decD] = precessRaDec(raJ, decJ, f.jdTT);
     const rows: [string, string][] = [
       ...extra,
-      ['RA / Dec (J2000)', `${formatRA(raJ)} ${formatDMS(decJ)}`],
-      ['RA / Dec (of date)', `${formatRA(raD)} ${formatDMS(decD)}`],
-      ['Altitude', `${formatDeg(alt)}${alt < 0 ? ' (below horizon)' : ''}`],
-      ['Azimuth', `${formatDeg(az)} ${compass(az)}`],
+      [t('info.radecJ2000'), `${formatRA(raJ)} ${formatDMS(decJ)}`],
+      [t('info.radecDate'), `${formatRA(raD)} ${formatDMS(decD)}`],
+      [t('info.altitude'), `${num(alt, 1)}°${alt < 0 ? ` ${t('info.below')}` : ''}`],
+      [t('info.azimuth'), `${num(az, 1)}° ${localCompass(compass(az))}`],
     ];
     $('info-title').textContent = title;
     $('info-sub').textContent = sub;
@@ -454,16 +464,16 @@ async function main() {
   }
 
   // ---------------------------------------------------------------- search
-  setupSearch(sky, buildSearchIndex(stars, dso), (t) => {
-    if (state.telescopeMode) { aimAt(t); return; }
-    selection = t;
+  setupSearch(sky, buildSearchIndex(stars, dso), (target) => {
+    if (state.telescopeMode) { aimAt(target); return; }
+    selection = target;
     tracking = true;
     $<HTMLInputElement>('info-track').checked = true;
     // Frame the object: big ones fill a good part of the view, small ones get a close look.
-    const extent = t.kind === 'dso' ? dso[t.index].major / 60 : t.kind === 'moon' ? 0.5 : 0;
-    state.fov = extent ? Math.max(2, Math.min(60, extent * 5)) : t.kind === 'planet' ? 8 : 30;
+    const extent = target.kind === 'dso' ? dso[target.index].major / 60 : target.kind === 'moon' ? 0.5 : 0;
+    state.fov = extent ? Math.max(2, Math.min(60, extent * 5)) : target.kind === 'planet' ? 8 : 30;
     sky.update(state, width, height);
-    centerOn(t);
+    centerOn(target);
     updateInfo(true);
   });
 
@@ -516,6 +526,35 @@ async function main() {
     sky.setScopeArea(top, bottom, left, right);
   }
 
+  // ---------------------------------------------------------------- language
+  const languageSelect = $<HTMLSelectElement>('language');
+  for (const l of LANGS) languageSelect.add(new Option(langName(l), l));
+  languageSelect.value = lang();
+  languageSelect.addEventListener('change', () => setLang(languageSelect.value as Lang));
+  onLangChange(() => {
+    languageSelect.value = lang();
+    speedSelect.querySelectorAll('option').forEach((o, i) => { o.textContent = speedLabel(i); });
+    skyQuality.querySelectorAll('option').forEach((o, i) => { o.textContent = t(`sky.${i}` as MsgKey); });
+    optionsSignature = '';
+    if (state.telescopeMode) refreshStops();
+    syncControls();
+    updateInfo(true);
+    lastClock = -Infinity;
+  });
+
+  // ---------------------------------------------------------------- quick guide
+  const guide = new Guide({
+    placeLabel,
+    setTelescope: (on: boolean) => setTelescope(on),
+    isTelescope: () => state.telescopeMode,
+    closePanels: () => panel.classList.add('collapsed'),
+  });
+  $('guide-toggle').addEventListener('click', () => guide.start());
+  // First visit: offer the guide, unless the page was opened on a shared view.
+  const q = new URLSearchParams(location.search);
+  const sharedView = ['target', 'scope', 't', 'guide'].some((k) => q.has(k));
+  if (!sharedView && !Guide.seen()) setTimeout(() => guide.start(), 700);
+
   // ---------------------------------------------------------------- loop
   const clockLocal = $('clock-local'), clockUtc = $('clock-utc'), clockPlace = $('clock-place');
   let lastFrame = performance.now();
@@ -561,11 +600,11 @@ async function main() {
     if (now - lastClock > 200) {
       lastClock = now;
       const d = new Date(state.time);
-      const lat = `${Math.abs(state.lat).toFixed(2)}°${state.lat >= 0 ? 'N' : 'S'}`;
-      const lon = `${Math.abs(state.lon).toFixed(2)}°${state.lon >= 0 ? 'E' : 'W'}`;
-      clockLocal.textContent = d.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'medium' });
+      const lat = `${num(Math.abs(state.lat), 2)}°${state.lat >= 0 ? 'N' : 'S'}`;
+      const lon = `${num(Math.abs(state.lon), 2)}°${localCompass(state.lon >= 0 ? 'E' : 'W')}`;
+      clockLocal.textContent = d.toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'medium' });
       clockUtc.textContent = `${d.toISOString().slice(0, 19).replace('T', ' ')} UTC · LST ${formatRA(f.lst).slice(0, 7)}`;
-      clockPlace.textContent = `${state.placeName} ${lat} ${lon} · Sun ${formatDeg(f.sunAlt)}`;
+      clockPlace.textContent = `${placeLabel()} ${lat} ${lon} · ${t('clock.sun', { alt: `${num(f.sunAlt, 1)}°` })}`;
       dayHint.hidden = state.telescopeMode || f.daylight < 0.5;
       if (document.activeElement !== dt) dt.value = toLocalInput(state.time);
     }
@@ -577,5 +616,5 @@ async function main() {
 main().catch((err) => {
   console.error(err);
   const el = document.getElementById('loading');
-  if (el) el.textContent = `Could not start: ${err instanceof Error ? err.message : String(err)}`;
+  if (el) el.textContent = t('app.error', { error: err instanceof Error ? err.message : String(err) });
 });

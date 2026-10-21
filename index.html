@@ -18,6 +18,7 @@
       <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m15.5 15.5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
       <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="7" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="17" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
       <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17.2" r="1.2" fill="currentColor"/></symbol>
       <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6-5.6-6-11a6 6 0 1 1 12 0c0 5.4-6 11-6 11Z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="10" r="2.2" fill="currentColor"/></symbol>
     </svg>
 
@@ -26,9 +27,9 @@
       <canvas id="overlay"></canvas>
 
       <header class="hud">
-        <div class="brand">Planetarium</div>
+        <div class="brand" data-i18n="app.title">Planetarium</div>
         <div id="clock" class="clock">
-          <span><span id="clock-local"></span> <span class="clock-note">(browser time)</span></span>
+          <span><span id="clock-local"></span> <span class="clock-note" data-i18n="clock.browser">(browser time)</span></span>
           <span id="clock-utc" class="clock-utc"></span>
           <span id="clock-place"></span>
         </div>
@@ -36,33 +37,34 @@
 
       <div class="top-actions">
         <div id="search" class="search">
-          <input id="search-input" type="search" placeholder="Search: Jupiter, M31, Vega…" autocomplete="off" spellcheck="false" aria-label="Search the sky" aria-controls="search-results" />
+          <input id="search-input" type="search" placeholder="Search: Jupiter, M31, Vega…" data-i18n-placeholder="search.placeholder" data-i18n-aria="search.aria" autocomplete="off" spellcheck="false" aria-label="Search the sky" aria-controls="search-results" />
           <ul id="search-results" class="search-results" role="listbox"></ul>
         </div>
-        <button id="search-toggle" class="icon-btn" aria-label="Search (/)" title="Search (/)" aria-expanded="false"><svg><use href="#i-search"/></svg></button>
-        <button id="panel-toggle" class="icon-btn" aria-controls="panel" aria-label="Settings" title="Settings"><svg><use href="#i-sliders"/></svg></button>
+        <button id="search-toggle" class="icon-btn" aria-label="Search (/)" title="Search (/)" data-i18n-title="top.search" data-i18n-aria="top.search" aria-expanded="false"><svg><use href="#i-search"/></svg></button>
+        <button id="guide-toggle" class="icon-btn" aria-label="Quick guide" title="Quick guide" data-i18n-title="top.guide" data-i18n-aria="top.guide"><svg><use href="#i-help"/></svg></button>
+        <button id="panel-toggle" class="icon-btn" aria-controls="panel" aria-label="Settings" title="Settings" data-i18n-title="top.settings" data-i18n-aria="top.settings"><svg><use href="#i-sliders"/></svg></button>
       </div>
 
       <div id="day-hint" class="day-hint" hidden>
-        <span>Daylight hides the stars.</span>
-        <button id="tonight">See tonight's sky</button>
+        <span data-i18n="day.hint">Daylight hides the stars.</span>
+        <button id="tonight" data-i18n="day.tonight">See tonight's sky</button>
       </div>
 
-      <div class="timebar" role="toolbar" aria-label="Time controls">
-        <button id="slower" class="icon-btn" title="Slower / backwards" aria-label="Slower or backwards"><svg><use href="#i-back"/></svg></button>
-        <button id="play" class="icon-btn" title="Play / pause (space)" aria-label="Play or pause"><svg><use id="play-icon" href="#i-pause"/></svg></button>
-        <button id="faster" class="icon-btn" title="Faster" aria-label="Faster"><svg><use href="#i-fwd"/></svg></button>
+      <div class="timebar" role="toolbar" aria-label="Time controls" data-i18n-aria="time.controls">
+        <button id="slower" class="icon-btn" title="Slower or backwards" aria-label="Slower or backwards" data-i18n-title="time.slower" data-i18n-aria="time.slower"><svg><use href="#i-back"/></svg></button>
+        <button id="play" class="icon-btn" title="Play or pause (space)" aria-label="Play or pause" data-i18n-title="time.play" data-i18n-aria="time.play"><svg><use id="play-icon" href="#i-pause"/></svg></button>
+        <button id="faster" class="icon-btn" title="Faster" aria-label="Faster" data-i18n-title="time.faster" data-i18n-aria="time.faster"><svg><use href="#i-fwd"/></svg></button>
         <span id="speed-label" class="speed"></span>
-        <button id="now" title="Back to the current time">Now</button>
-        <button id="scope-toggle" class="with-icon" title="Telescope view (T)"><svg><use href="#i-scope"/></svg>Telescope</button>
+        <button id="now" title="Back to the current time" data-i18n-title="time.nowTitle" data-i18n="time.now">Now</button>
+        <button id="scope-toggle" class="with-icon" title="Telescope view (T)" data-i18n-title="scope.buttonTitle"><svg><use href="#i-scope"/></svg><span data-i18n="scope.button">Telescope</span></button>
         <span id="scope-bar" class="scope-bar" hidden>
-          <button id="scope-prev" title="Previous target ([)" aria-label="Previous target">‹</button>
-          <select id="scope-target" aria-label="Telescope target"></select>
-          <button id="scope-next" title="Next target (])" aria-label="Next target">›</button>
+          <button id="scope-prev" title="Previous target ([)" aria-label="Previous target ([)" data-i18n-title="scope.prev" data-i18n-aria="scope.prev">‹</button>
+          <select id="scope-target" aria-label="Telescope target" data-i18n-aria="scope.target"></select>
+          <button id="scope-next" title="Next target (])" aria-label="Next target (])" data-i18n-title="scope.next" data-i18n-aria="scope.next">›</button>
         </span>
       </div>
 
-      <section id="gear" class="gear" hidden aria-label="Telescope and eyepiece">
+      <section id="gear" class="gear" hidden aria-label="Telescope and eyepiece" data-i18n-aria="gear.aria">
         <button id="gear-toggle" class="gear-head" aria-expanded="true" aria-controls="gear-body">
           <svg class="gear-icon"><use href="#i-scope"/></svg>
           <span class="gear-title"><strong id="gear-name"></strong><span id="gear-spec" class="gear-spec"></span></span>
@@ -70,22 +72,22 @@
           <svg class="gear-chevron"><use href="#i-chevron"/></svg>
         </button>
         <div id="gear-body" class="gear-body">
-          <label class="gear-label" for="gear-model">Telescope</label>
+          <label class="gear-label" for="gear-model" data-i18n="gear.telescope">Telescope</label>
           <select id="gear-model"></select>
           <p id="gear-note" class="gear-note"></p>
           <div id="gear-custom" class="gear-custom" hidden>
-            <label>Aperture <output id="out-aperture"></output>
+            <label><span data-i18n="gear.aperture">Aperture</span> <output id="out-aperture"></output>
               <input id="rng-aperture" type="range" min="40" max="400" step="1" />
             </label>
-            <label>Focal length <output id="out-focal"></output>
+            <label><span data-i18n="gear.focal">Focal length</span> <output id="out-focal"></output>
               <input id="rng-focal" type="range" min="200" max="3000" step="10" />
             </label>
-            <label>Design <select id="custom-design"></select></label>
+            <label><span data-i18n="gear.design">Design</span> <select id="custom-design"></select></label>
           </div>
           <div id="gear-eyepiece-block">
-            <span class="gear-label">Eyepiece</span>
+            <span class="gear-label" data-i18n="gear.eyepiece">Eyepiece</span>
             <div id="gear-eyepieces" class="chips"></div>
-            <span class="gear-label">Barlow lens</span>
+            <span class="gear-label" data-i18n="gear.barlow">Barlow lens</span>
             <div id="gear-barlows" class="chips"></div>
           </div>
           <div id="gear-readouts" class="readouts"></div>
@@ -95,68 +97,83 @@
 
       <aside id="panel" class="panel">
         <div class="panel-head">
-          <span>Settings</span>
-          <button id="panel-close" class="close" aria-label="Close settings">×</button>
+          <span data-i18n="top.settings">Settings</span>
+          <button id="panel-close" class="close" aria-label="Close" data-i18n-aria="info.close">×</button>
         </div>
         <details open>
-          <summary>Time</summary>
-          <label>Date and time (your browser's time zone)
+          <summary data-i18n="set.time">Date and time</summary>
+          <label><span data-i18n="set.datetime">Date and time (your browser's time zone)</span>
             <input id="datetime" type="datetime-local" step="60" />
           </label>
-          <label>Speed
+          <label><span data-i18n="set.speed">Speed</span>
             <select id="speed"></select>
           </label>
         </details>
 
         <details open>
-          <summary>Location</summary>
-          <label>Preset <select id="place"></select></label>
+          <summary data-i18n="set.location">Location</summary>
+          <label><span data-i18n="set.preset">Place</span> <select id="place"></select></label>
           <div class="row">
-            <label>Latitude <input id="lat" type="number" step="0.0001" min="-90" max="90" /></label>
-            <label>Longitude <input id="lon" type="number" step="0.0001" min="-180" max="180" /></label>
+            <label><span data-i18n="set.lat">Latitude</span> <input id="lat" type="number" step="0.0001" min="-90" max="90" /></label>
+            <label><span data-i18n="set.lon">Longitude</span> <input id="lon" type="number" step="0.0001" min="-180" max="180" /></label>
           </div>
-          <button id="geolocate" class="wide with-icon"><svg><use href="#i-pin"/></svg>Use my location</button>
+          <button id="geolocate" class="wide with-icon"><svg><use href="#i-pin"/></svg><span data-i18n="set.geolocate">Use my location</span></button>
           <p id="geo-status" class="hint"></p>
-          <label>Sky darkness <select id="sky-quality"></select></label>
+          <label><span data-i18n="set.darkness">Sky darkness</span> <select id="sky-quality"></select></label>
         </details>
 
         <details open>
-          <summary>Display</summary>
-          <label class="check"><input id="show-milkyway" type="checkbox" /> Milky Way</label>
-          <label class="check"><input id="show-deepsky" type="checkbox" /> Galaxies, nebulae and clusters</label>
-          <label class="check"><input id="show-lines" type="checkbox" /> Constellation lines</label>
-          <label class="check"><input id="show-cnames" type="checkbox" /> Constellation names</label>
-          <label class="check"><input id="show-snames" type="checkbox" /> Star names</label>
-          <label class="check"><input id="show-atmosphere" type="checkbox" /> Atmosphere and daylight</label>
-          <label class="check"><input id="show-ground" type="checkbox" /> Ground</label>
+          <summary data-i18n="set.display">Display</summary>
+          <label class="check"><input id="show-milkyway" type="checkbox" /> <span data-i18n="set.milkyway">Milky Way</span></label>
+          <label class="check"><input id="show-deepsky" type="checkbox" /> <span data-i18n="set.deepsky">Galaxies, nebulae and clusters</span></label>
+          <label class="check"><input id="show-lines" type="checkbox" /> <span data-i18n="set.lines">Constellation lines</span></label>
+          <label class="check"><input id="show-cnames" type="checkbox" /> <span data-i18n="set.cnames">Constellation names</span></label>
+          <label class="check"><input id="show-snames" type="checkbox" /> <span data-i18n="set.snames">Star names</span></label>
+          <label class="check"><input id="show-atmosphere" type="checkbox" /> <span data-i18n="set.atmosphere">Atmosphere and daylight</span></label>
+          <label class="check"><input id="show-ground" type="checkbox" /> <span data-i18n="set.ground">Ground</span></label>
         </details>
 
         <details open>
-          <summary>Telescope</summary>
-          <label class="check"><input id="scope" type="checkbox" /> Telescope view</label>
-          <label class="check"><input id="real-orientation" type="checkbox" /> Show the image as the eyepiece does (rotated or mirrored)</label>
-          <p class="hint">Pick the telescope, eyepiece and Barlow in the equipment panel of the telescope view.</p>
+          <summary data-i18n="set.telescope">Telescope</summary>
+          <label class="check"><input id="scope" type="checkbox" /> <span data-i18n="set.scope">Telescope view</span></label>
+          <label class="check"><input id="real-orientation" type="checkbox" /> <span data-i18n="set.orientation">Show the image as the eyepiece does (rotated or mirrored)</span></label>
+          <p class="hint" data-i18n="set.gearHint">Pick the telescope, eyepiece and Barlow in the equipment panel of the telescope view.</p>
         </details>
 
-        <p class="hint">Drag to look around · scroll or pinch to zoom · click an object for details.
-          Keys: / search, arrows pan, +/− zoom, space pause, T telescope, [ ] previous/next telescope target.</p>
-        <p class="hint credits">Milky Way and Moon: NASA/GSFC. Planet maps: Solar System Scope (CC BY 4.0).
-          Deep-sky data: OpenNGC (CC BY-SA 4.0). Stars: Yale Bright Star Catalogue.</p>
+        <label class="lang-row"><span data-i18n="set.language">Language</span> <select id="language"></select></label>
+        <p class="hint" data-i18n="set.help"></p>
+        <p class="hint credits" data-i18n="set.credits"></p>
       </aside>
 
       <div id="info" class="info" hidden>
-        <button id="info-close" class="close" title="Close">×</button>
+        <button id="info-close" class="close" title="Close" aria-label="Close" data-i18n-title="info.close" data-i18n-aria="info.close">×</button>
         <h2 id="info-title"></h2>
         <p id="info-sub" class="sub"></p>
         <table id="info-table" class="stats"></table>
         <div class="actions">
-          <button id="info-center">Center</button>
-          <button id="info-scope" class="with-icon"><svg><use href="#i-scope"/></svg>Observe</button>
-          <label class="check"><input id="info-track" type="checkbox" /> Track</label>
+          <button id="info-center" data-i18n="info.center">Center</button>
+          <button id="info-scope" class="with-icon"><svg><use href="#i-scope"/></svg><span data-i18n="info.observe">Observe</span></button>
+          <label class="check"><input id="info-track" type="checkbox" /> <span data-i18n="info.track">Track</span></label>
         </div>
       </div>
 
-      <div id="loading" class="loading">Loading the sky…</div>
+      <div id="loading" class="loading"><div class="loading-ring"></div><span data-i18n="app.loading">Loading the sky…</span></div>
+
+      <div id="guide" class="guide" hidden>
+        <div class="guide-spot"></div>
+        <div class="guide-card" role="dialog" aria-modal="false" aria-labelledby="guide-title">
+          <p class="guide-step"></p>
+          <h2 id="guide-title"></h2>
+          <p class="guide-text"></p>
+          <div class="guide-langs"></div>
+          <div class="guide-actions">
+            <button class="guide-skip"></button>
+            <span class="guide-dots"></span>
+            <button class="guide-back"></button>
+            <button class="guide-next"></button>
+          </div>
+        </div>
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

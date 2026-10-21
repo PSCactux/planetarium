@@ -5,6 +5,8 @@ import { telescopeStats } from '../astro/optics';
 import { altAzToHorizonVec } from '../astro/coords';
 import { mulMatVec, sphericalToVec } from '../astro/math';
 import { chromaticAberration, findTelescope, EYEPIECES } from '../equipment';
+import { dsoName, localCompass, modelName, num, t, type MsgKey } from '../i18n';
+import { bodyName } from '../names';
 import type { Sky, Target } from './sky';
 
 const CARDINALS: [string, number, boolean][] = [
@@ -84,9 +86,9 @@ export class Overlay {
     ctx.font = `600 12px ${FONT}`;
     ctx.fillStyle = 'rgba(255, 214, 140, 0.95)';
     const solar: [string, Target][] = [
-      ['Sun', { kind: 'sun' }],
-      ['Moon', { kind: 'moon' }],
-      ...PLANETS.map((p) => [p.name, { kind: 'planet', id: p.id }] as [string, Target]),
+      [bodyName('sun'), { kind: 'sun' }],
+      [bodyName('moon'), { kind: 'moon' }],
+      ...PLANETS.map((p) => [bodyName(p.id), { kind: 'planet', id: p.id }] as [string, Target]),
     ];
     for (const [name, t] of solar) {
       if (t.kind === 'planet' && f.planets.get(t.id)!.mag > f.limitMag) continue;
@@ -105,7 +107,7 @@ export class Overlay {
       for (const m of sky.bodies.galilean) {
         if (!m.visible || !visible(m.dir)) continue;
         const p = sky.project(m.dir, width, height);
-        if (p) ctx.fillText(m.name, p[0] + 6, p[1] - 9);
+        if (p) ctx.fillText(t(`body.${m.name}` as MsgKey), p[0] + 6, p[1] - 9);
       }
     }
 
@@ -116,7 +118,7 @@ export class Overlay {
         ctx.textAlign = 'center';
         ctx.font = major ? `700 18px ${FONT}` : `600 13px ${FONT}`;
         ctx.fillStyle = major ? 'rgba(240, 120, 90, 0.95)' : 'rgba(200, 170, 150, 0.8)';
-        ctx.fillText(label, p[0], p[1]);
+        ctx.fillText(localCompass(label), p[0], p[1]);
       }
     }
 
@@ -165,7 +167,8 @@ export class Overlay {
       ctx.font = `500 11px ${FONT}`;
       ctx.textAlign = 'left';
       ctx.fillStyle = `rgba(${rgb}, ${(scope ? 0.6 : 0.75) * night})`;
-      const label = o.name && (fov < 25 || scope) ? `${o.id} · ${o.name}` : o.id;
+      const name = dsoName(o.id, o.name);
+      const label = name && (fov < 25 || scope) ? `${o.id} · ${name}` : o.id;
       ctx.fillText(label, p[0] + Math.min(r, 160) * 0.75 + 6, p[1] + Math.min(r, 160) * 0.75 + 6);
     });
   }
@@ -282,17 +285,18 @@ export class Overlay {
     const { cx, cy, r, left, right } = sky.scopeView;
     const room = (right - left) - 24;
     const top = cy - r - 8;
-    const name = model?.name ?? `${state.telescope.aperture} mm f/${(state.telescope.focalLength / state.telescope.aperture).toFixed(1)}`;
-    const eyepiece = model?.fixed ? '' : ` · ${EYEPIECES.find((x) => x.id === e.eyepieceId)?.focalLength ?? state.telescope.eyepieceFocalLength} mm${e.barlow > 1 ? ` + ×${e.barlow} Barlow` : ''}`;
-    const optics = `${name}${eyepiece} · ${s.magnification.toFixed(0)}×`;
-    const field = `field ${s.trueFov.toFixed(2)}° · stars to mag ${f.limitMag.toFixed(1)}` +
-      (f.limitMag > 6.6 ? ' (catalogue complete to ~6.5)' : '');
+    const native = state.telescope.nativeFocalLength ?? state.telescope.focalLength;
+    const name = model ? modelName(model.id, model.name) : `${state.telescope.aperture} mm f/${num(native / state.telescope.aperture, 1)}`;
+    const eyepiece = model?.fixed ? '' : ` · ${EYEPIECES.find((x) => x.id === e.eyepieceId)?.focalLength ?? state.telescope.eyepieceFocalLength} mm${e.barlow > 1 ? ` ${t('cap.barlow', { n: e.barlow })}` : ''}`;
+    const optics = `${name}${eyepiece} · ${num(s.magnification)}×`;
+    const note = ` ${t('cap.catalogue')}`;
+    const field = t('cap.field', { field: num(s.trueFov, 2), mag: num(f.limitMag, 1) }) + (f.limitMag > 6.6 ? note : '');
     const oneLine = `${optics} · ${field}`;
     if (ctx.measureText(oneLine).width <= room) {
       ctx.fillText(oneLine, cx, Math.max(14, top));
     } else {
       // Narrow screens: two lines, and drop the catalogue note if it still does not fit.
-      const second = ctx.measureText(field).width <= room ? field : field.replace(' (catalogue complete to ~6.5)', '');
+      const second = ctx.measureText(field).width <= room ? field : field.replace(note, '');
       ctx.fillText(optics, cx, Math.max(14, top - 16));
       ctx.fillText(second, cx, Math.max(30, top));
     }
@@ -303,7 +307,7 @@ export class Overlay {
     if (sep < s.trueFov * 2 && f.sunAlt > -1) {
       ctx.font = `700 15px ${FONT}`;
       ctx.fillStyle = '#ff6b5a';
-      ctx.fillText('Never point a telescope at the Sun without a certified solar filter!', cx, cy);
+      ctx.fillText(t('cap.sun'), cx, cy);
     }
   }
 

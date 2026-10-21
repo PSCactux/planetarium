@@ -225,11 +225,13 @@ export function angularRadiusDeg(radiusKm: number, distanceAu: number): number {
   return Math.asin(radiusKm / (distanceAu * AU_KM)) * RAD;
 }
 
-/** Name of the lunar phase from the Sun-Moon elongation trend. */
-export function moonPhaseName(illuminated: number, waxing: boolean): string {
-  if (illuminated < 0.03) return 'New Moon';
-  if (illuminated > 0.97) return 'Full Moon';
-  if (Math.abs(illuminated - 0.5) < 0.05) return waxing ? 'First Quarter' : 'Last Quarter';
-  if (illuminated < 0.5) return waxing ? 'Waxing Crescent' : 'Waning Crescent';
-  return waxing ? 'Waxing Gibbous' : 'Waning Gibbous';
+export type MoonPhase = 'new' | 'full' | 'firstQuarter' | 'lastQuarter' | 'waxingCrescent' | 'waningCrescent' | 'waxingGibbous' | 'waningGibbous';
+
+/** Lunar phase from the illuminated fraction and whether it is growing. */
+export function moonPhase(illuminated: number, waxing: boolean): MoonPhase {
+  if (illuminated < 0.03) return 'new';
+  if (illuminated > 0.97) return 'full';
+  if (Math.abs(illuminated - 0.5) < 0.05) return waxing ? 'firstQuarter' : 'lastQuarter';
+  if (illuminated < 0.5) return waxing ? 'waxingCrescent' : 'waningCrescent';
+  return waxing ? 'waxingGibbous' : 'waningGibbous';
 }
