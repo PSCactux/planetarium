@@ -1,0 +1,18 @@
+Image notices for the files in this folder
+==========================================
+
+milkyway.jpg
+  NASA/Goddard Space Flight Center Scientific Visualization Studio, Deep Star
+  Maps 2020 (https://svs.gsfc.nasa.gov/4851/), "milkyway_2020_4k" celestial
+  coordinate map, tone-mapped and slightly smoothed. Public domain.
+
+moon.jpg, moon-normal.jpg
+  NASA/Goddard Space Flight Center Scientific Visualization Studio, CGI Moon Kit
+  (https://svs.gsfc.nasa.gov/4720/): LRO LROC colour map and LOLA elevation
+  (the normal map was computed from the elevation). Public domain.
+
+mercury.jpg, venus.jpg, mars.jpg, jupiter.jpg, saturn.jpg, uranus.jpg,
+neptune.jpg, saturn-ring.png
+  Solar System Scope (https://www.solarsystemscope.com/textures/), based on
+  NASA mission data, licensed under CC BY 4.0
+  (https://creativecommons.org/licenses/by/4.0/). Resized to 1024 px.

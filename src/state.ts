@@ -1,4 +1,5 @@
 import type { TelescopeSetup } from './astro/optics';
+import { BARLOWS, type Barlow, type Equipment, defaultEquipment, findTelescope, nearestEyepiece, opticalSetup } from './equipment';
 
 export interface Place {
   name: string;
@@ -30,7 +31,17 @@ export const SPEEDS: { label: string; rate: number }[] = [
   { label: '1 day/s', rate: 86400 },
 ];
 
-export const EYEPIECE_PRESETS = [25, 10, 6];
+/**
+ * How dark the observing site is. `limit`: naked-eye limiting magnitude at night;
+ * `milkyWay`: how much of the Milky Way survives; `surface`: faintest visible surface
+ * brightness of extended objects, mag/arcmin² (a dark site's sky is about 13.1).
+ */
+export const SKY_QUALITY: { label: string; limit: number; milkyWay: number; surface: number }[] = [
+  { label: 'Dark site (Bortle 2)', limit: 6.6, milkyWay: 1, surface: 13.6 },
+  { label: 'Rural (Bortle 4)', limit: 6.0, milkyWay: 0.6, surface: 12.9 },
+  { label: 'Suburban (Bortle 6)', limit: 5.0, milkyWay: 0.15, surface: 11.9 },
+  { label: 'City (Bortle 8)', limit: 4.0, milkyWay: 0, surface: 10.9 },
+];
 
 export interface AppState {
   time: number; // simulated time, ms since Unix epoch
@@ -48,9 +59,20 @@ export interface AppState {
   showStarNames: boolean;
   showAtmosphere: boolean;
   showGround: boolean;
+  showMilkyWay: boolean;
+  showDeepSky: boolean;
+  /** Index into SKY_QUALITY. */
+  skyQuality: number;
   telescopeMode: boolean;
-  invertImage: boolean;
+  /** Show the image as the eyepiece does: rotated by a Newtonian, mirrored by a star diagonal. */
+  realOrientation: boolean;
+  equipment: Equipment;
+  /** Derived from `equipment` by syncTelescope(). */
   telescope: TelescopeSetup;
+}
+
+export function syncTelescope(state: AppState): void {
+  state.telescope = opticalSetup(state.equipment);
 }
 
 export function defaultState(): AppState {
@@ -69,16 +91,21 @@ export function defaultState(): AppState {
     showStarNames: true,
     showAtmosphere: true,
     showGround: true,
+    showMilkyWay: true,
+    showDeepSky: true,
+    skyQuality: 1,
     telescopeMode: false,
-    invertImage: false,
-    telescope: { focalLength: 400, aperture: 70, eyepieceFocalLength: 10, apparentFov: 52 },
+    realOrientation: false,
+    equipment: defaultEquipment(),
+    telescope: opticalSetup(defaultEquipment()),
   };
 }
 
 /**
  * Optional overrides from the query string, handy for sharing a view or for screenshots:
  * ?t=2026-10-03T20:00:00Z&lat=51.48&lon=0.00&az=180&alt=40&fov=60&scope=1&eye=25&paused=1
- * (main.ts also reads ?target=<planet|moon|sun|star name> and ?panel=0)
+ * and the equipment: &model=skyliner-200p&barlow=2&sky=0 (index into SKY_QUALITY)
+ * (main.ts also reads ?target=<planet|moon|sun|star|M31|NGC 5139...> and ?panel=0/1)
  */
 export function applyQuery(state: AppState, search: string): AppState {
   const q = new URLSearchParams(search);
@@ -97,8 +124,17 @@ export function applyQuery(state: AppState, search: string): AppState {
   state.az = num('az') ?? state.az;
   state.alt = Math.max(-10, Math.min(89.9, num('alt') ?? state.alt));
   state.fov = Math.max(1, Math.min(120, num('fov') ?? state.fov));
+  const model = q.get('model');
+  if (model && findTelescope(model)) state.equipment.telescopeId = model;
   const eye = num('eye');
-  if (eye && eye > 0) state.telescope.eyepieceFocalLength = eye;
+  if (eye && eye > 0) state.equipment.eyepieceId = nearestEyepiece(eye).id;
+  const barlow = num('barlow');
+  if (barlow && (BARLOWS as readonly number[]).includes(barlow)) state.equipment.barlow = barlow as Barlow;
+  const sky = num('sky');
+  if (sky !== undefined && sky >= 0 && sky < SKY_QUALITY.length) state.skyQuality = Math.round(sky);
+  if (q.get('milkyway') === '0') state.showMilkyWay = false;
+  if (q.get('deepsky') === '0') state.showDeepSky = false;
+  syncTelescope(state);
   if (q.get('scope') === '1') state.telescopeMode = true;
   if (q.get('paused') === '1') state.playing = false;
   if (q.get('lines') === '0') state.showLines = false;

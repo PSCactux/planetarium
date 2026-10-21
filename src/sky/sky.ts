@@ -1,36 +1,43 @@
 import * as THREE from 'three';
-import type { Constellation, Star } from '../data';
-import type { AppState } from '../state';
+import type { Constellation, Dso, Star } from '../data';
+import { type AppState, SKY_QUALITY } from '../state';
 import { type Mat3, type Vec3, mulMatVec, sphericalToVec } from '../astro/math';
-import { altAzToHorizonVec, horizonVecToAltAz, j2000ToHorizonMatrix } from '../astro/coords';
+import { altAzToHorizonVec, eclipticToEquatorial, horizonVecToAltAz, j2000ToHorizonMatrix } from '../astro/coords';
 import { julianDate, lstDeg, ttFromUt } from '../astro/time';
 import {
   type BodyPosition,
   type PlanetId,
-  MOON_RADIUS_KM,
   PLANETS,
   SUN_RADIUS_KM,
   angularRadiusDeg,
+  heliocentricEcliptic,
   moonPosition,
   observerPosition,
   planetPosition,
   sunPosition,
 } from '../astro/solarsystem';
-import { nakedEyeLimitingMagnitude, telescopeStats } from '../astro/optics';
+import { bodyFlattening, bodyRadiusKm } from '../astro/bodies';
+import { EYE_PUPIL_MM, nakedEyeLimitingMagnitude, telescopeStats } from '../astro/optics';
 import { bvToRgb } from './colors';
 import { skyFragment, skyVertex, starFragment, starVertex } from './shaders';
+import { MilkyWay } from './milkyway';
+import { DeepSky } from './deepsky';
+import { SolarSystemBodies } from './bodies';
 
 // Radii of the concentric spheres everything is drawn on (camera at the centre).
 const R_STARS = 1000;
+const R_DSO = 990;
 const R_BODIES = 950;
 const R_GROUND = 800;
+const R_MILKY_WAY = 1200;
 const R_SKY = 1500;
 
 export type Target =
   | { kind: 'star'; index: number }
   | { kind: 'planet'; id: PlanetId }
   | { kind: 'sun' }
-  | { kind: 'moon' };
+  | { kind: 'moon' }
+  | { kind: 'dso'; index: number };
 
 /** Everything derived from the state for one frame. */
 export interface Frame {
@@ -42,6 +49,8 @@ export interface Frame {
   sun: BodyPosition;
   moon: BodyPosition;
   planets: Map<PlanetId, BodyPosition>;
+  /** Angular radius of each planet in degrees (equatorial). */
+  planetRadius: Map<PlanetId, number>;
   sunAlt: number;
   /** Faintest magnitude currently drawn. */
   limitMag: number;
@@ -50,6 +59,10 @@ export interface Frame {
   /** Angular radius (deg) the Sun and Moon are drawn with. */
   sunRadius: number;
   moonRadius: number;
+  /** Brightness of extended objects through the eyepiece relative to the naked eye, 0..1. */
+  surfaceBrightness: number;
+  /** Image orientation on screen: 'normal', 'rotated' (180°) or 'mirrored' (left-right). */
+  orientation: 'normal' | 'rotated' | 'mirrored';
 }
 
 function mat3ToMatrix4(m: Mat3): THREE.Matrix4 {
@@ -69,9 +82,15 @@ function radialTexture(stops: [number, string][]): THREE.CanvasTexture {
   return tex;
 }
 
+const norm = (v: Vec3): Vec3 => {
+  const l = Math.hypot(v[0], v[1], v[2]);
+  return [v[0] / l, v[1] / l, v[2] / l];
+};
+
 export class Sky {
   readonly renderer: THREE.WebGLRenderer;
-  readonly camera = new THREE.PerspectiveCamera(70, 1, 0.1, 4000);
+  // Everything sits 800-1500 units away: a far near plane keeps the depth buffer precise.
+  readonly camera = new THREE.PerspectiveCamera(70, 1, 50, 4000);
   private scene = new THREE.Scene();
   private celestial = new THREE.Group();
   private starMaterial: THREE.ShaderMaterial;
@@ -84,33 +103,50 @@ export class Sky {
   private horizonLine: THREE.LineLoop;
   private sunDisc: THREE.Sprite;
   private sunGlow: THREE.Sprite;
-  private moon: THREE.Mesh;
-  private sunLight = new THREE.DirectionalLight(0xffffff, 4.5);
+  private milkyWay: MilkyWay;
+  readonly deepSky: DeepSky;
+  readonly bodies: SolarSystemBodies;
   /** J2000 unit vectors of the stars, for picking and labels. */
   readonly starDirs: Float32Array;
   frame!: Frame;
+  /** Where the eyepiece circle goes on screen (CSS pixels); see setScopeArea(). */
+  scopeView = { cx: 0, cy: 0, r: 100, left: 0, right: 0 };
+  private scopeArea = { top: 0, bottom: 0, left: 0, right: 0 };
+
+  /** The free part of the screen, between the header, the side panels and the controls, for the eyepiece. */
+  setScopeArea(top: number, bottom: number, left: number, right: number): void {
+    this.scopeArea = { top, bottom, left, right };
+  }
 
   constructor(
     canvas: HTMLCanvasElement,
     readonly stars: Star[],
     readonly constellations: Constellation[],
+    readonly dso: Dso[],
   ) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.celestial.matrixAutoUpdate = false;
     this.scene.add(this.celestial);
+    const base = `${import.meta.env.BASE_URL}textures/`;
 
-    // Sky dome (drawn first, behind everything).
+    // Sky dome (drawn first, behind everything). Double-sided materials keep working when
+    // the image is mirrored, which flips the winding of every triangle.
     this.skyMaterial = new THREE.ShaderMaterial({
       vertexShader: skyVertex,
       fragmentShader: skyFragment,
       uniforms: { sunDir: { value: new THREE.Vector3(0, -1, 0) }, enabled: { value: 1 } },
-      side: THREE.BackSide,
+      side: THREE.DoubleSide,
       depthWrite: false,
     });
     const dome = new THREE.Mesh(new THREE.SphereGeometry(R_SKY, 64, 32), this.skyMaterial);
     dome.renderOrder = -10;
     this.scene.add(dome);
+
+    this.milkyWay = new MilkyWay(R_MILKY_WAY, `${base}milkyway.jpg`);
+    this.celestial.add(this.milkyWay.mesh);
+    this.deepSky = new DeepSky(dso, R_DSO);
+    this.celestial.add(this.deepSky.mesh);
 
     // Stars.
     this.starDirs = new Float32Array(stars.length * 3);
@@ -156,7 +192,7 @@ export class Sky {
     this.lines.frustumCulled = false;
     this.celestial.add(this.lines);
 
-    // Planets: a handful of points in the horizon frame, updated every frame.
+    // Planets as points when they are too small to show a disc.
     this.planetGeometry = new THREE.BufferGeometry();
     this.planetGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PLANETS.length * 3), 3));
     this.planetGeometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(PLANETS.flatMap((p) => p.color)), 3));
@@ -165,12 +201,17 @@ export class Sky {
     planetPoints.frustumCulled = false;
     this.scene.add(planetPoints);
 
+    // Textured Moon and planets, and Jupiter's moons.
+    this.bodies = new SolarSystemBodies(base, R_BODIES, this.starMaterial);
+    this.scene.add(this.bodies.group);
+
     // Sun: a bright disc plus a soft glow.
     this.sunDisc = new THREE.Sprite(
       new THREE.SpriteMaterial({
         map: radialTexture([[0, '#fffef8'], [0.8, '#fff6d8'], [1, 'rgba(255,240,200,0)']]),
         depthWrite: false,
         blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
       }),
     );
     this.sunGlow = new THREE.Sprite(
@@ -178,19 +219,13 @@ export class Sky {
         map: radialTexture([[0, 'rgba(255,230,170,0.7)'], [0.25, 'rgba(255,200,120,0.25)'], [1, 'rgba(255,180,90,0)']]),
         depthWrite: false,
         blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
       }),
     );
     this.scene.add(this.sunGlow, this.sunDisc);
 
-    // Moon: a real sphere lit from the Sun's direction, so the phase comes for free.
-    this.moon = new THREE.Mesh(
-      new THREE.SphereGeometry(1, 48, 24),
-      new THREE.MeshLambertMaterial({ color: 0xe8e4dc, emissive: 0x0b0b0d }),
-    );
-    this.scene.add(this.moon, this.sunLight, this.sunLight.target);
-
     // Ground: the lower hemisphere, closer than the sky so it hides what is below the horizon.
-    this.groundMaterial = new THREE.MeshBasicMaterial({ color: 0x050705, side: THREE.BackSide });
+    this.groundMaterial = new THREE.MeshBasicMaterial({ color: 0x050705, side: THREE.DoubleSide });
     this.ground = new THREE.Mesh(
       new THREE.SphereGeometry(R_GROUND, 64, 16, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2),
       this.groundMaterial,
@@ -215,8 +250,13 @@ export class Sky {
   cameraFov(state: AppState, width: number, height: number): number {
     if (!state.telescopeMode) return state.fov;
     const tfov = telescopeStats(state.telescope).trueFov;
-    // The eyepiece circle fills 90% of the smaller viewport side.
-    return (tfov * height) / (0.9 * Math.min(width, height));
+    const a = this.scopeArea;
+    const top = a.top, bottom = a.bottom > top + 120 ? a.bottom : height;
+    const left = a.right > a.left + 240 ? a.left : 0, right = a.right > a.left + 240 ? a.right : width;
+    const r = Math.max(60, Math.min(0.45 * height, (right - left) / 2 - 6, (bottom - top) / 2 - 4));
+    this.scopeView = { cx: (left + right) / 2, cy: (top + bottom) / 2, r, left, right };
+    // The true field fills the eyepiece circle.
+    return (tfov * height) / (2 * r);
   }
 
   update(state: AppState, width: number, height: number): Frame {
@@ -230,69 +270,123 @@ export class Sky {
     const sun = sunPosition(jdTT);
     const moon = moonPosition(jdTT, observerPosition(state.lat, lst));
     const planets = new Map<PlanetId, BodyPosition>();
-    for (const p of PLANETS) planets.set(p.id, planetPosition(p.id, jdTT));
+    const planetRadius = new Map<PlanetId, number>();
+    for (const p of PLANETS) {
+      const pos = planetPosition(p.id, jdTT);
+      planets.set(p.id, pos);
+      planetRadius.set(p.id, angularRadiusDeg(bodyRadiusKm(p.id), pos.distanceAu));
+    }
 
     const sunWorld = mulMatVec(matrix, sun.dirJ2000);
     const sunAlt = horizonVecToAltAz(sunWorld).alt;
     const atmosphere = state.showAtmosphere;
-    const naked = atmosphere ? nakedEyeLimitingMagnitude(sunAlt) : 6.5;
+    const quality = SKY_QUALITY[state.skyQuality] ?? SKY_QUALITY[1];
+    const naked = atmosphere ? Math.min(nakedEyeLimitingMagnitude(sunAlt), quality.limit) : 6.5;
     const daylight = atmosphere ? Math.min(1, Math.max(0, (sunAlt + 12) / 14)) : 0;
+    const darkness = atmosphere ? 1 - Math.min(1, Math.max(0, (sunAlt + 18) / 12)) : 1; // 1 = astronomical night
     const fov = this.cameraFov(state, width, height);
+    const scope = state.telescopeMode;
+    const stats = telescopeStats(state.telescope);
     let limitMag: number;
-    if (state.telescopeMode) {
+    if (scope) {
       // The telescope gains the same magnitudes over the eye whatever the sky brightness.
-      limitMag = telescopeStats(state.telescope).limitingMagnitude - (6.5 - naked);
+      limitMag = stats.limitingMagnitude - (6.5 - naked);
     } else {
       // Zooming in a little helps, like looking more carefully (and keeps zoomed views lively).
       limitMag = naked + Math.min(2, Math.max(0, 1.5 * Math.log10(60 / fov)));
     }
+    // Extended objects never look brighter through a telescope than to the eye; with a small
+    // exit pupil they dim. Perceived brightness falls off more gently than the light does.
+    const pupil = Math.min(stats.exitPupil, EYE_PUPIL_MM);
+    const surfaceBrightness = scope ? Math.min(1, 0.32 + 0.68 * Math.sqrt(pupil / EYE_PUPIL_MM)) : 1;
+    const pxPerDeg = height / fov;
 
-    
     // Uniforms and per-frame objects.
     this.starMaterial.uniforms.limitMag.value = limitMag;
     this.starMaterial.uniforms.pixelScale.value = this.renderer.getPixelRatio();
     (this.skyMaterial.uniforms.sunDir.value as THREE.Vector3).set(...sunWorld);
     this.skyMaterial.uniforms.enabled.value = atmosphere ? 1 : 0;
-    this.lines.visible = state.showLines;
-    this.lineMaterial.opacity = (state.telescopeMode ? 0.25 : 0.55) * (1 - 0.85 * daylight);
+    // No constellation lines in the eyepiece: they are not in the real view.
+    this.lines.visible = state.showLines && !scope;
+    this.lineMaterial.opacity = 0.55 * (1 - 0.85 * daylight);
     this.ground.visible = this.horizonLine.visible = state.showGround;
     const g = 0.025 + 0.2 * daylight * daylight; // stays dark through twilight
     this.groundMaterial.color.setRGB(g * 0.75, g, g * 0.7, THREE.SRGBColorSpace);
 
+    // Milky Way: needs a dark sky; through the eyepiece it is just a faint background.
+    const mwSky = atmosphere ? quality.milkyWay * darkness * darkness : 1;
+    this.milkyWay.intensity = state.showMilkyWay ? 0.8 * mwSky * (scope ? 0.35 * surfaceBrightness : 1) : 0;
+
+    // Deep-sky objects: faintest visible surface brightness for the sky and the instrument.
+    let sbLimit = (atmosphere ? quality.surface : SKY_QUALITY[0].surface) - (1 - darkness) * 9;
+    let resolve = 0;
+    if (scope) {
+      // Magnification darkens the sky background, which helps contrast; aperture resolves stars.
+      sbLimit += 1.2 + 1.5 * Math.log10(Math.max(1, state.telescope.aperture / 50)) - 2.5 * Math.log10(1 / surfaceBrightness);
+      resolve = Math.min(1, Math.max(0, (state.telescope.aperture - 60) / 180));
+    }
+    this.deepSky.mesh.visible = state.showDeepSky;
+    this.deepSky.update(pxPerDeg * (180 / Math.PI), sbLimit, resolve, scope ? 1.25 : 1);
+
+    // Planets: a textured disc once they are big enough on screen, otherwise a point.
     const posAttr = this.planetGeometry.getAttribute('position') as THREE.BufferAttribute;
     const magAttr = this.planetGeometry.getAttribute('mag') as THREE.BufferAttribute;
     PLANETS.forEach((p, i) => {
       const body = planets.get(p.id)!;
       const w = mulMatVec(matrix, body.dirJ2000);
       posAttr.setXYZ(i, w[0] * R_BODIES, w[1] * R_BODIES, w[2] * R_BODIES);
-      magAttr.setX(i, body.mag);
+      const helio = heliocentricEcliptic(p.id, jdTT);
+      const toSun = norm(mulMatVec(matrix, eclipticToEquatorial([-helio[0], -helio[1], -helio[2]])));
+      const disc = w[1] > -0.2 && this.bodies.pose(p.id, { dir: w, radius: planetRadius.get(p.id)!, toSun }, matrix, jdTT, pxPerDeg, surfaceBrightness);
+      magAttr.setX(i, disc ? 99 : body.mag);
+      if (p.id === 'jupiter') {
+        this.bodies.placeGalilean(w, planetRadius.get('jupiter')!, matrix, jdTT, bodyFlattening('jupiter'));
+      }
     });
     posAttr.needsUpdate = magAttr.needsUpdate = true;
 
     // Sun and Moon are drawn larger than life when zoomed out so they stay visible.
-    const minRadius = fov * 0.012;
+    const minRadius = scope ? 0 : fov * 0.012;
     const sunR = Math.max(angularRadiusDeg(SUN_RADIUS_KM, sun.distanceAu), minRadius);
     const sunSize = 2 * R_BODIES * Math.tan(sunR * (Math.PI / 180));
     this.sunDisc.position.set(...sunWorld).multiplyScalar(R_BODIES);
     this.sunDisc.scale.setScalar(sunSize * 1.1);
     this.sunGlow.position.copy(this.sunDisc.position);
     this.sunGlow.scale.setScalar(sunSize * 8);
-    this.sunLight.position.set(...sunWorld).multiplyScalar(10);
 
     const moonWorld = mulMatVec(matrix, moon.dirJ2000);
-    const moonR = Math.max(angularRadiusDeg(MOON_RADIUS_KM, moon.distanceAu), minRadius);
-    this.moon.position.set(...moonWorld).multiplyScalar(R_BODIES);
-    this.moon.scale.setScalar(R_BODIES * Math.tan(moonR * (Math.PI / 180)));
+    const moonR = Math.max(angularRadiusDeg(bodyRadiusKm('moon'), moon.distanceAu), minRadius);
+    this.bodies.pose(
+      'moon',
+      { dir: moonWorld, radius: moonR, toSun: sunWorld, earthshine: 0.05 * (1 - moon.illuminated) ** 2 },
+      matrix, jdTT, pxPerDeg, surfaceBrightness * (1 - 0.35 * daylight), 0,
+    );
 
-    this.frame = { jdUT, jdTT, lst, matrix, sun, moon, planets, sunAlt, limitMag, daylight, sunRadius: sunR, moonRadius: moonR };
+    const orientation: Frame['orientation'] = !scope || !state.realOrientation || state.telescope.design === 'binocular'
+      ? 'normal' : state.telescope.design === 'newtonian' ? 'rotated' : 'mirrored';
 
-    // Camera.
+    this.frame = {
+      jdUT, jdTT, lst, matrix, sun, moon, planets, planetRadius, sunAlt, limitMag, daylight,
+      sunRadius: sunR, moonRadius: moonR, surfaceBrightness, orientation,
+    };
+
+    this.bodies.setMirrored(orientation === 'mirrored');
+
+    // Camera. In the telescope view the image is centred on the eyepiece circle.
     this.camera.fov = fov;
+    if (scope) this.camera.setViewOffset(width, height, width / 2 - this.scopeView.cx, height / 2 - this.scopeView.cy, width, height);
+    else this.camera.clearViewOffset();
     this.camera.updateProjectionMatrix();
+    if (orientation === 'mirrored') {
+      // A star diagonal swaps left and right.
+      this.camera.projectionMatrix.elements[0] *= -1;
+      this.camera.projectionMatrix.elements[8] *= -1;
+      this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
+    }
     const dir = altAzToHorizonVec(state.alt, state.az);
     this.camera.up.set(0, 1, 0);
     this.camera.lookAt(dir[0], dir[1], dir[2]);
-    if (state.telescopeMode && state.invertImage) this.camera.rotateZ(Math.PI);
+    if (orientation === 'rotated') this.camera.rotateZ(Math.PI);
     this.camera.updateMatrixWorld();
     return this.frame;
   }
@@ -312,12 +406,16 @@ export class Sky {
       case 'planet': return mulMatVec(f.matrix, f.planets.get(t.id)!.dirJ2000);
       case 'sun': return mulMatVec(f.matrix, f.sun.dirJ2000);
       case 'moon': return mulMatVec(f.matrix, f.moon.dirJ2000);
+      case 'dso': return mulMatVec(f.matrix, this.deepSky.dirs[t.index]);
     }
   }
 
-  /** On-screen radius in pixels of a target's disc (0 for point-like objects). */
+  /** On-screen radius in pixels of a target's disc or extent (0 for point-like objects). */
   discRadiusPx(t: Target, height: number): number {
-    const r = t.kind === 'sun' ? this.frame.sunRadius : t.kind === 'moon' ? this.frame.moonRadius : 0;
+    const f = this.frame;
+    const r = t.kind === 'sun' ? f.sunRadius : t.kind === 'moon' ? f.moonRadius
+      : t.kind === 'planet' ? f.planetRadius.get(t.id)! * (t.id === 'saturn' ? 2.27 : 1)
+      : t.kind === 'dso' ? this.dso[t.index].major / 120 : 0;
     return (r / this.camera.fov) * height;
   }
 
@@ -331,17 +429,17 @@ export class Sky {
   }
 
   /** Finds the object closest to a screen point (CSS pixels). */
-  pick(x: number, y: number, width: number, height: number, groundOn: boolean, radius = 14): Target | null {
+  pick(x: number, y: number, width: number, height: number, groundOn: boolean, radius = 14, deepSky = true): Target | null {
     const f = this.frame;
     let best: Target | null = null;
     let bestScore = Infinity;
-    const consider = (t: Target, v: Vec3, mag: number) => {
+    const consider = (t: Target, v: Vec3, mag: number, reach = 0) => {
       if (groundOn && v[1] < 0) return;
       const s = this.project(v, width, height);
       if (!s) return;
       const d = Math.hypot(s[0] - x, s[1] - y);
-      if (d > radius) return;
-      const score = d + mag * 1.5; // prefer brighter objects at similar distances
+      if (d > radius + reach) return;
+      const score = Math.max(0, d - reach) + mag * 1.5; // prefer brighter objects at similar distances
       if (score < bestScore) {
         bestScore = score;
         best = t;
@@ -350,11 +448,18 @@ export class Sky {
     const solar: Target[] = [{ kind: 'sun' }, { kind: 'moon' }, ...PLANETS.map((p) => ({ kind: 'planet' as const, id: p.id }))];
     for (const t of solar) {
       const mag = t.kind === 'planet' ? f.planets.get(t.id)!.mag : -10;
-      if (t.kind !== 'planet' || mag < f.limitMag + 0.3) consider(t, this.targetVec(t), Math.max(mag, -3) - 6);
+      if (t.kind !== 'planet' || mag < f.limitMag + 0.3) consider(t, this.targetVec(t), Math.max(mag, -3) - 6, this.discRadiusPx(t, height));
     }
     for (let i = 0; i < this.stars.length; i++) {
       if (this.stars[i].mag > f.limitMag + 0.3) continue;
       consider({ kind: 'star', index: i }, this.targetVec({ kind: 'star', index: i }), this.stars[i].mag);
+    }
+    if (deepSky) {
+      // Deep-sky objects lose to stars at the same spot, but their whole extent is clickable.
+      this.dso.forEach((o, i) => {
+        const t: Target = { kind: 'dso', index: i };
+        consider(t, this.targetVec(t), o.mag + 2, Math.min(60, this.discRadiusPx(t, height) * 0.6));
+      });
     }
     return best;
   }

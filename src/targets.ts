@@ -1,6 +1,6 @@
 // Showpiece objects for the telescope view and the logic that picks which of them are up right now.
 
-import type { Star } from './data';
+import type { Dso, Star } from './data';
 import type { Sky, Target } from './sky/sky';
 import { PLANETS } from './astro/solarsystem';
 import { horizonVecToAltAz } from './astro/coords';
@@ -23,14 +23,25 @@ const STAR_ORDER = [
   'Algol', 'Mira', 'Fomalhaut', 'Canopus', 'Achernar', 'Acrux', 'Rigil Kentaurus',
 ];
 
+// Deep-sky showpieces, roughly from the most to the least striking in a small telescope.
+const DSO_ORDER = [
+  'M42', 'M31', 'M45', 'M13', 'NGC 869', 'NGC 884', 'M57', 'M27', 'M44', 'M8', 'M22', 'M11', 'M17', 'M51',
+  'M81', 'M82', 'M104', 'M1', 'M3', 'M5', 'M92', 'M33', 'M20', 'M35', 'M37', 'M7', 'M6',
+  'NGC 5139', 'NGC 104', 'NGC 3372', 'LMC', 'SMC', 'NGC 4755', 'NGC 7293', 'NGC 253', 'NGC 5128',
+];
+
 /** Minimum altitude, and minimum distance from the Sun, for a target to be offered. */
 const MIN_ALT = 5;
 const MIN_SUN_SEPARATION = 15;
 
-export function buildTour(stars: Star[]): TourStop[] {
+export function buildTour(stars: Star[], dso: Dso[] = []): TourStop[] {
   const tour: TourStop[] = [{ key: 'moon', name: 'Moon', target: { kind: 'moon' } }];
   for (const id of PLANET_ORDER) {
     tour.push({ key: id, name: PLANETS.find((p) => p.id === id)!.name, target: { kind: 'planet', id } });
+  }
+  for (const id of DSO_ORDER) {
+    const index = dso.findIndex((o) => o.id === id);
+    if (index >= 0) tour.push({ key: `dso:${index}`, name: dsoLabel(dso[index]), target: { kind: 'dso', index } });
   }
   for (const name of STAR_ORDER) {
     const index = stars.findIndex((s) => s.name === name);
@@ -40,7 +51,12 @@ export function buildTour(stars: Star[]): TourStop[] {
 }
 
 export function targetKey(t: Target): string {
-  return t.kind === 'star' ? `star:${t.index}` : t.kind === 'planet' ? t.id : t.kind;
+  return t.kind === 'star' ? `star:${t.index}` : t.kind === 'dso' ? `dso:${t.index}` : t.kind === 'planet' ? t.id : t.kind;
+}
+
+/** "M31 Andromeda Galaxy", "NGC 5139 Omega Centauri", "M3". */
+export function dsoLabel(o: Dso): string {
+  return o.name && o.name !== o.id ? `${o.id} ${o.name}` : o.id;
 }
 
 /** Tour stops that are above the horizon, away from the Sun and bright enough to see right now. */
@@ -57,6 +73,8 @@ export function visibleStops(tour: TourStop[], sky: Sky, stars: Star[]): TourSto
       case 'sun': return false;
       case 'star': return stars[target.index].mag <= f.limitMag;
       case 'planet': return f.planets.get(target.id)!.mag <= f.limitMag;
+      // Faint fuzzies need a dark sky and a bit of margin over the star limit.
+      case 'dso': return f.daylight < 0.35 && sky.dso[target.index].mag <= f.limitMag - 1;
     }
   });
 }
@@ -69,6 +87,7 @@ export function stopMagnitude(stop: TourStop, sky: Sky, stars: Star[]): number {
     case 'sun': return sky.frame.sun.mag;
     case 'star': return stars[t.index].mag;
     case 'planet': return sky.frame.planets.get(t.id)!.mag;
+    case 'dso': return sky.dso[t.index].mag;
   }
 }
 

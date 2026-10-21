@@ -1,15 +1,19 @@
+import '@fontsource-variable/inter';
 import './style.css';
 import { loadCatalogues } from './data';
 import { Sky, type Target } from './sky/sky';
 import { Overlay } from './sky/overlay';
-import { EYEPIECE_PRESETS, PLACES, SPEEDS, type AppState, applyQuery, defaultState } from './state';
+import { PLACES, SKY_QUALITY, SPEEDS, type AppState, applyQuery, defaultState, syncTelescope } from './state';
 import { horizonVecToAltAz, j2000ToHorizonMatrix, precessRaDec } from './astro/coords';
 import { vecToSpherical, norm360, mulMatVec } from './astro/math';
 import { PLANETS, moonPhaseName, sunPosition } from './astro/solarsystem';
 import { julianDate, lstDeg, ttFromUt } from './astro/time';
 import { telescopeStats } from './astro/optics';
 import { compass, formatDMS, formatDeg, formatRA, toLocalInput } from './ui/format';
-import { buildTour, defaultStop, stopMagnitude, targetKey, visibleStops, type TourStop } from './targets';
+import { buildTour, defaultStop, dsoLabel, stopMagnitude, targetKey, visibleStops, type TourStop } from './targets';
+import { BARLOWS, findTelescope, EYEPIECES, type Equipment } from './equipment';
+import { GearPanel } from './ui/gear';
+import { buildSearchIndex, setupSearch } from './ui/search';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -29,11 +33,42 @@ function nextDark(time: number, lat: number, lon: number): number | null {
   return null; // midnight sun or polar day
 }
 
+// The equipment and sky darkness are remembered between visits (unless the URL sets them).
+const STORAGE_KEY = 'planetarium.equipment';
+function loadSaved(state: AppState, search: string): void {
+  const q = new URLSearchParams(search);
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null') as { equipment?: Equipment; skyQuality?: number; realOrientation?: boolean } | null;
+    if (!saved) return;
+    const e = saved.equipment;
+    if (e && !q.has('model') && !q.has('eye') && !q.has('barlow')) {
+      if (findTelescope(e.telescopeId) || e.telescopeId === 'custom') state.equipment.telescopeId = e.telescopeId;
+      if (EYEPIECES.some((x) => x.id === e.eyepieceId)) state.equipment.eyepieceId = e.eyepieceId;
+      if ((BARLOWS as readonly number[]).includes(e.barlow)) state.equipment.barlow = e.barlow;
+      if (e.custom) Object.assign(state.equipment.custom, e.custom);
+    }
+    if (!q.has('sky') && typeof saved.skyQuality === 'number' && SKY_QUALITY[saved.skyQuality]) state.skyQuality = saved.skyQuality;
+    if (typeof saved.realOrientation === 'boolean') state.realOrientation = saved.realOrientation;
+  } catch {
+    // Storage unavailable or corrupt: keep the defaults.
+  }
+  syncTelescope(state);
+}
+function save(state: AppState): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ equipment: state.equipment, skyQuality: state.skyQuality, realOrientation: state.realOrientation }));
+  } catch {
+    // Private mode or blocked storage: nothing to do.
+  }
+}
+
 async function main() {
-  const state: AppState = applyQuery(defaultState(), location.search);
-  const { stars, constellations } = await loadCatalogues();
+  const state: AppState = defaultState();
+  loadSaved(state, location.search);
+  applyQuery(state, location.search);
+  const { stars, constellations, dso } = await loadCatalogues();
   const glCanvas = $<HTMLCanvasElement>('gl');
-  const sky = new Sky(glCanvas, stars, constellations);
+  const sky = new Sky(glCanvas, stars, constellations, dso);
   const overlay = new Overlay($<HTMLCanvasElement>('overlay'));
   $('loading').remove();
 
@@ -47,15 +82,15 @@ async function main() {
   window.addEventListener('resize', resize);
   resize();
 
-  // Keep the info card above the time bar, whose height changes when it wraps (phones, telescope mode).
-  const timebar = document.querySelector<HTMLElement>('.timebar')!;
-  new ResizeObserver(() => {
-    document.documentElement.style.setProperty('--timebar-h', `${timebar.offsetHeight}px`);
-  }).observe(timebar);
+  // Keep the cards above the time bar and the equipment panel, whose heights change.
+  const watchHeight = (el: HTMLElement, name: string) =>
+    new ResizeObserver(() => document.documentElement.style.setProperty(name, `${el.offsetHeight}px`)).observe(el);
+  watchHeight(document.querySelector<HTMLElement>('.timebar')!, '--timebar-h');
+  watchHeight($('gear'), '--gear-h');
 
   let selection: Target | null = null;
   let tracking = false;
-  const tour = buildTour(stars);
+  const tour = buildTour(stars, dso);
   let visible: TourStop[] = [];
 
   // ---------------------------------------------------------------- view input
@@ -67,12 +102,14 @@ async function main() {
   const clampAlt = (a: number) => Math.max(-30, Math.min(89.9, a));
   const zoom = (factor: number) => {
     if (state.telescopeMode) return;
-    state.fov = Math.max(1, Math.min(120, state.fov * factor));
+    state.fov = Math.max(0.5, Math.min(120, state.fov * factor));
   };
   const pan = (dx: number, dy: number) => {
-    const k = degPerPixel() * (state.telescopeMode && state.invertImage ? -1 : 1);
-    state.az = norm360(state.az - dx * k);
-    state.alt = clampAlt(state.alt + dy * k);
+    // Drag the sky along with the pointer, whichever way the eyepiece turns the image.
+    const o = sky.frame?.orientation ?? 'normal';
+    const k = degPerPixel();
+    state.az = norm360(state.az - dx * k * (o === 'normal' ? 1 : -1));
+    state.alt = clampAlt(state.alt + dy * k * (o === 'rotated' ? -1 : 1));
     tracking = false;
     $<HTMLInputElement>('info-track').checked = false;
   };
@@ -109,7 +146,7 @@ async function main() {
     pointers.delete(e.pointerId);
     if (pointers.size === 0 && downAt && moved < 6) {
       // A fingertip is less precise than a mouse pointer.
-      const picked = sky.pick(e.clientX, e.clientY, width, height, state.showGround, e.pointerType === 'touch' ? 28 : 14);
+      const picked = sky.pick(e.clientX, e.clientY, width, height, state.showGround, e.pointerType === 'touch' ? 28 : 14, state.showDeepSky);
       if (state.telescopeMode) {
         // In the eyepiece a click re-aims the telescope; a click on empty sky keeps the current target.
         if (picked) aimAt(picked);
@@ -213,14 +250,25 @@ async function main() {
     );
   });
 
+  const skyQuality = $<HTMLSelectElement>('sky-quality');
+  SKY_QUALITY.forEach((q, i) => skyQuality.add(new Option(q.label, String(i))));
+  skyQuality.addEventListener('change', () => { state.skyQuality = Number(skyQuality.value); save(state); });
+
   const checks: [string, keyof AppState][] = [
+    ['show-milkyway', 'showMilkyWay'], ['show-deepsky', 'showDeepSky'],
     ['show-lines', 'showLines'], ['show-cnames', 'showConstellationNames'], ['show-snames', 'showStarNames'],
-    ['show-atmosphere', 'showAtmosphere'], ['show-ground', 'showGround'], ['invert', 'invertImage'],
+    ['show-atmosphere', 'showAtmosphere'], ['show-ground', 'showGround'], ['real-orientation', 'realOrientation'],
   ];
   for (const [id, key] of checks) {
     const el = $<HTMLInputElement>(id);
-    el.addEventListener('change', () => { (state[key] as boolean) = el.checked; });
+    el.addEventListener('change', () => { (state[key] as boolean) = el.checked; save(state); });
   }
+
+  // ---------------------------------------------------------------- equipment
+  const gear = new GearPanel(state, () => save(state));
+  // On phones the panel starts folded so the eyepiece stays visible.
+  if (window.innerWidth < 640) { $('gear').classList.add('collapsed'); $('gear-toggle').setAttribute('aria-expanded', 'false'); }
+  else document.body.classList.add('gear-open');
 
   // ---------------------------------------------------------------- telescope targets
   const scopeSelect = $<HTMLSelectElement>('scope-target');
@@ -231,6 +279,7 @@ async function main() {
       const s = stars[t.index];
       return s.name || s.designation || `HR ${s.hr}`;
     }
+    if (t.kind === 'dso') return dsoLabel(dso[t.index]);
     if (t.kind === 'planet') return PLANETS.find((p) => p.id === t.id)!.name;
     return t.kind === 'sun' ? 'Sun' : 'Moon';
   }
@@ -281,80 +330,55 @@ async function main() {
   $('scope-prev').addEventListener('click', () => stepTarget(-1));
   $('scope-next').addEventListener('click', () => stepTarget(1));
 
+  // The settings panel and the equipment panel compete for space on smaller desktops.
+  let panelWasOpen = false;
   const setTelescope = (on: boolean) => {
+    if (on === state.telescopeMode && on) return;
     state.telescopeMode = on;
     if (on) {
+      panelWasOpen = !panel.classList.contains('collapsed');
+      if (window.innerWidth < 1200) panel.classList.add('collapsed');
       // Like a finder scope: keep the selected object if it is up, otherwise go to Vega or whatever is visible.
       refreshStops();
       const keep = selection && selection.kind !== 'sun' && horizonVecToAltAz(sky.targetVec(selection)).alt > 0;
       const target = keep ? selection : defaultStop(visible, sky.frame.daylight, (s) => stopMagnitude(s, sky, stars))?.target;
       if (target) aimAt(target);
+    } else if (panelWasOpen) {
+      panel.classList.remove('collapsed');
     }
     syncControls();
   };
   $<HTMLInputElement>('scope').addEventListener('change', (e) => setTelescope((e.target as HTMLInputElement).checked));
   $('scope-toggle').addEventListener('click', () => setTelescope(!state.telescopeMode));
-  const scopeInputs: [string, keyof AppState['telescope']][] = [
-    ['tel-f', 'focalLength'], ['tel-d', 'aperture'], ['eye-f', 'eyepieceFocalLength'], ['eye-afov', 'apparentFov'],
-  ];
-  for (const [id, key] of scopeInputs) {
-    const el = $<HTMLInputElement>(id);
-    el.addEventListener('change', () => {
-      const v = Number(el.value);
-      if (Number.isFinite(v) && v > 0) state.telescope[key] = v;
-      syncControls();
-    });
-  }
-  const eyepieces = $('eyepieces');
-  for (const mm of EYEPIECE_PRESETS) {
-    const b = document.createElement('button');
-    b.textContent = `${mm} mm`;
-    b.dataset.mm = String(mm);
-    b.addEventListener('click', () => { state.telescope.eyepieceFocalLength = mm; syncControls(); });
-    eyepieces.append(b);
-  }
 
   function syncControls() {
     speedSelect.value = String(state.speedIndex);
     $('speed-label').textContent = state.playing ? SPEEDS[state.speedIndex].label : 'Paused';
-    $('play').textContent = state.playing ? '⏸' : '▶';
+    $('play-icon').setAttribute('href', state.playing ? '#i-pause' : '#i-play');
     latInput.value = state.lat.toFixed(4);
     lonInput.value = state.lon.toFixed(4);
     const idx = PLACES.findIndex((p) => p.lat === state.lat && p.lon === state.lon);
     placeSelect.value = idx >= 0 ? String(idx) : 'custom';
+    skyQuality.value = String(state.skyQuality);
     for (const [id, key] of checks) $<HTMLInputElement>(id).checked = state[key] as boolean;
     $<HTMLInputElement>('scope').checked = state.telescopeMode;
     $('scope-toggle').classList.toggle('active', state.telescopeMode);
     $('scope-bar').hidden = !state.telescopeMode;
+    $('gear').hidden = !state.telescopeMode;
     document.body.classList.toggle('scope-mode', state.telescopeMode);
-    for (const [id, key] of scopeInputs) $<HTMLInputElement>(id).value = String(state.telescope[key]);
-    for (const b of eyepieces.querySelectorAll<HTMLButtonElement>('button'))
-      b.classList.toggle('active', Number(b.dataset.mm) === state.telescope.eyepieceFocalLength);
-    renderScopeStats();
-  }
-
-  function renderScopeStats() {
-    const s = telescopeStats(state.telescope);
-    const tooHigh = s.magnification > s.maxUsefulMagnification;
-    const rows: [string, string, boolean?][] = [
-      ['Magnification', `${s.magnification.toFixed(0)}×`, tooHigh],
-      ['True field of view', `${s.trueFov.toFixed(2)}° (${(s.trueFov * 60).toFixed(0)}′)`],
-      ['Exit pupil', `${s.exitPupil.toFixed(1)} mm`],
-      ['Focal ratio', `f/${s.focalRatio.toFixed(1)}`],
-      ['Limiting magnitude', `≈ ${s.limitingMagnitude.toFixed(1)}`],
-      ['Useful magnification', `${Math.ceil(s.minUsefulMagnification)}× – ${s.maxUsefulMagnification.toFixed(0)}×`],
-      ['Resolution (Dawes)', `${s.dawesLimitArcsec.toFixed(1)}″`],
-      ['Light grasp vs eye', `${s.lightGrasp.toFixed(0)}×`],
-    ];
-    $('scope-stats').innerHTML = rows
-      .map(([k, v, warn]) => `<tr><td>${k}</td><td${warn ? ' class="warn" title="Above the useful maximum"' : ''}>${v}</td></tr>`)
-      .join('');
+    gear.sync();
   }
 
   // ---------------------------------------------------------------- info card
   const info = $('info');
   $('info-close').addEventListener('click', () => { selection = null; tracking = false; updateInfo(true); });
   $('info-center').addEventListener('click', () => selection && centerOn(selection));
+  $('info-scope').addEventListener('click', () => {
+    if (!selection) return;
+    const t = selection;
+    if (!state.telescopeMode) setTelescope(true);
+    aimAt(t);
+  });
   $<HTMLInputElement>('info-track').addEventListener('change', (e) => {
     tracking = (e.target as HTMLInputElement).checked;
     if (tracking && selection) centerOn(selection);
@@ -366,6 +390,9 @@ async function main() {
     state.az = az;
   }
 
+  const KIND_NAMES = { galaxy: 'Galaxy', globular: 'Globular cluster', open: 'Open cluster', nebula: 'Nebula', planetary: 'Planetary nebula', double: 'Double star' };
+  const size = (arcmin: number) => (arcmin >= 60 ? `${(arcmin / 60).toFixed(1)}°` : `${arcmin.toFixed(arcmin < 10 ? 1 : 0)}′`);
+
   let lastInfo = 0;
   function updateInfo(force = false) {
     const now = performance.now();
@@ -373,6 +400,7 @@ async function main() {
     lastInfo = now;
     info.hidden = !selection;
     if (!selection) return;
+    $('info-scope').hidden = state.telescopeMode || selection.kind === 'sun';
     const f = sky.frame;
     const v = sky.targetVec(selection);
     const { alt, az } = horizonVecToAltAz(v);
@@ -384,6 +412,12 @@ async function main() {
       sub = ['Star', s.name ? s.designation : '', `HR ${s.hr}`].filter(Boolean).join(' · ');
       [raJ, decJ] = [s.ra, s.dec];
       extra.push(['Magnitude', s.mag.toFixed(2)], ['Colour index B−V', s.bv.toFixed(2)]);
+    } else if (selection.kind === 'dso') {
+      const o = dso[selection.index];
+      title = o.name ? `${o.id} · ${o.name}` : o.id;
+      sub = [KIND_NAMES[o.kind], o.catalogue !== o.id ? o.catalogue : ''].filter(Boolean).join(' · ');
+      [raJ, decJ] = [o.ra, o.dec];
+      extra.push(['Magnitude', o.mag.toFixed(1)], ['Size', o.minor && o.minor !== o.major ? `${size(o.major)} × ${size(o.minor)}` : size(o.major)]);
     } else {
       const body = selection.kind === 'planet' ? f.planets.get(selection.id)! : selection.kind === 'sun' ? f.sun : f.moon;
       [raJ, decJ] = vecToSpherical(body.dirJ2000);
@@ -391,8 +425,8 @@ async function main() {
         const id = selection.id;
         title = PLANETS.find((p) => p.id === id)!.name;
         sub = 'Planet';
-        extra.push(['Magnitude', body.mag.toFixed(1)], ['Distance', `${body.distanceAu.toFixed(3)} au`],
-          ['Illuminated', `${(body.illuminated * 100).toFixed(0)} %`]);
+        extra.push(['Magnitude', body.mag.toFixed(1)], ['Apparent size', `${(f.planetRadius.get(id)! * 7200).toFixed(1)}″`],
+          ['Distance', `${body.distanceAu.toFixed(3)} au`], ['Illuminated', `${(body.illuminated * 100).toFixed(0)} %`]);
       } else if (selection.kind === 'sun') {
         title = 'Sun';
         sub = 'Star · never look at it through a telescope without a proper solar filter';
@@ -419,14 +453,31 @@ async function main() {
     $('info-table').innerHTML = rows.map(([k, val]) => `<tr><td>${k}</td><td>${val}</td></tr>`).join('');
   }
 
-  // Optional ?target=moon|jupiter|sirius|... selects, centres and tracks an object.
-  const targetName = new URLSearchParams(location.search).get('target')?.toLowerCase();
+  // ---------------------------------------------------------------- search
+  setupSearch(sky, buildSearchIndex(stars, dso), (t) => {
+    if (state.telescopeMode) { aimAt(t); return; }
+    selection = t;
+    tracking = true;
+    $<HTMLInputElement>('info-track').checked = true;
+    // Frame the object: big ones fill a good part of the view, small ones get a close look.
+    const extent = t.kind === 'dso' ? dso[t.index].major / 60 : t.kind === 'moon' ? 0.5 : 0;
+    state.fov = extent ? Math.max(2, Math.min(60, extent * 5)) : t.kind === 'planet' ? 8 : 30;
+    sky.update(state, width, height);
+    centerOn(t);
+    updateInfo(true);
+  });
+
+  // Optional ?target=moon|jupiter|sirius|m31|ngc 5139|omega centauri selects, centres and tracks an object.
+  const targetName = new URLSearchParams(location.search).get('target')?.toLowerCase().trim();
   if (targetName) {
     const planet = PLANETS.find((p) => p.id === targetName);
     const starIndex = stars.findIndex((s) => s.name.toLowerCase() === targetName);
+    const squash = (x: string) => x.toLowerCase().replace(/\s+/g, '');
+    const dsoIndex = dso.findIndex((o) => squash(o.id) === squash(targetName) || squash(o.catalogue) === squash(targetName) || o.name.toLowerCase() === targetName);
     selection = targetName === 'sun' || targetName === 'moon' ? { kind: targetName }
       : planet ? { kind: 'planet', id: planet.id }
-      : starIndex >= 0 ? { kind: 'star', index: starIndex } : null;
+      : starIndex >= 0 ? { kind: 'star', index: starIndex }
+      : dsoIndex >= 0 ? { kind: 'dso', index: dsoIndex } : null;
     if (selection) {
       sky.update(state, width, height);
       centerOn(selection);
@@ -437,13 +488,40 @@ async function main() {
   }
 
   // ?scope=1 opens straight into the telescope view, aimed at something worth looking at.
-  if (state.telescopeMode) setTelescope(true);
+  if (state.telescopeMode) { state.telescopeMode = false; setTelescope(true); }
+
+  /** Leaves room for the header and caption above the eyepiece, and for the controls below it. */
+  const hud = document.querySelector<HTMLElement>('.hud')!;
+  const timebar = document.querySelector<HTMLElement>('.timebar')!;
+  function placeEyepiece() {
+    const narrow = width < 640;
+    const top = hud.getBoundingClientRect().bottom + (narrow ? 44 : 30);
+    // On desktop the equipment panel and the info card sit at the sides; on phones they stack below.
+    const below = narrow ? [timebar, $('gear'), info] : [timebar];
+    let bottom = height;
+    for (const el of below) {
+      if (el.hidden || el.offsetParent === null) continue;
+      bottom = Math.min(bottom, el.getBoundingClientRect().top - 10);
+    }
+    let left = 0, right = width;
+    if (!narrow) {
+      const gearBox = $('gear').getBoundingClientRect();
+      if (!$('gear').hidden && gearBox.width) left = gearBox.right + 8;
+      const infoBox = info.getBoundingClientRect();
+      if (!info.hidden && infoBox.width) right = infoBox.left - 8;
+      // Keep the eyepiece centred when only one side is taken, unless that wastes too much room.
+      const margin = Math.max(left, width - right);
+      if (width - 2 * margin > 0.5 * width) { left = margin; right = width - margin; }
+    }
+    sky.setScopeArea(top, bottom, left, right);
+  }
 
   // ---------------------------------------------------------------- loop
   const clockLocal = $('clock-local'), clockUtc = $('clock-utc'), clockPlace = $('clock-place');
   let lastFrame = performance.now();
   let lastClock = -Infinity;
   let lastStops = -Infinity;
+  let lastFilter = '';
   syncControls();
 
   function frame(now: number) {
@@ -455,11 +533,27 @@ async function main() {
       sky.update(state, width, height);
       centerOn(selection);
     }
+    if (state.telescopeMode) placeEyepiece();
     const f = sky.update(state, width, height);
     if (state.telescopeMode && now - lastStops > 1000) {
       lastStops = now;
       refreshStops(false);
     }
+
+    // Diffraction and seeing: past the useful magnification the image goes soft.
+    let filter = '';
+    if (state.telescopeMode) {
+      const s = telescopeStats(state.telescope);
+      const airyArcsec = 138 / state.telescope.aperture; // 1.22 λ/D at 550 nm
+      const seeingArcsec = 1.2;
+      const blurArcsec = Math.hypot(airyArcsec, seeingArcsec) * 0.5;
+      const px = ((blurArcsec / 3600) / sky.camera.fov) * height;
+      const extra = Math.max(0, s.magnification / s.maxUsefulMagnification - 1) * 1.5;
+      const blur = Math.max(0, px - 0.6) + extra;
+      if (blur > 0.15) filter = `blur(${blur.toFixed(2)}px)`;
+    }
+    if (filter !== lastFilter) { glCanvas.style.filter = filter; lastFilter = filter; }
+
     sky.render();
     overlay.draw(sky, state, selection, width, height);
     updateInfo();

@@ -5,6 +5,12 @@ export interface TelescopeSetup {
   aperture: number;
   eyepieceFocalLength: number;
   apparentFov: number;
+  /** Central obstruction as a fraction of the aperture diameter (reflectors, catadioptrics). */
+  obstruction?: number;
+  /** Optical design, see Design in equipment.ts. */
+  design?: string;
+  /** Focal length of the telescope itself, before any Barlow lens. */
+  nativeFocalLength?: number;
 }
 
 export interface TelescopeStats {
@@ -34,8 +40,9 @@ export function telescopeStats(s: TelescopeSetup): TelescopeStats {
     maxUsefulMagnification: 2 * s.aperture,
     // Below this the exit pupil is larger than the eye's pupil and light is wasted.
     minUsefulMagnification: s.aperture / EYE_PUPIL_MM,
-    // Common visual estimate for a dark sky: 2.7 + 5 log10(D[mm]).
-    limitingMagnitude: 2.7 + 5 * Math.log10(s.aperture),
+    // Common visual estimate for a dark sky: 2.7 + 5 log10(D[mm]), less the light the
+    // central obstruction blocks.
+    limitingMagnitude: 2.7 + 5 * Math.log10(s.aperture) + 2.5 * Math.log10(1 - (s.obstruction ?? 0) ** 2),
     dawesLimitArcsec: 116 / s.aperture,
     lightGrasp: (s.aperture / EYE_PUPIL_MM) ** 2,
   };
